@@ -1,0 +1,41 @@
+{
+  "name": "duh-scala",
+  "version": "0.1.0",
+  "description": "DUH component export to Scala",
+  "main": "lib/index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "eslint lib && nyc mocha"
+  },
+  "bin": {
+    "duh-export-scala": "./bin/duh-export-scala.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sifive/duh-scala.git"
+  },
+  "author": "SiFive",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/sifive/duh-scala/issues"
+  },
+  "homepage": "https://github.com/sifive/duh-scala#readme",
+  "devDependencies": {
+    "@drom/eslint-config": "^0.9.0",
+    "chai": "^4.2.0",
+    "eslint": "^5.16.0",
+    "mocha": "^6.1.4",
+    "nyc": "^14.0.0"
+  },
+  "eslintConfig": {
+    "extends": "@drom/eslint-config/eslint4/node8"
+  },
+  "dependencies": {
+    "fs-extra": "^7.0.1",
+    "lodash.get": "^4.4.2",
+    "yargs": "^13.2.2",
+    "duh-core": "sifive/duh-core"
+  }
+}
