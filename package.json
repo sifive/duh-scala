@@ -23,7 +23,7 @@
   },
   "homepage": "https://github.com/sifive/duh-scala#readme",
   "devDependencies": {
-    "@drom/eslint-config": "^0.9.0",
+    "@drom/eslint-config": "^0.10.0",
     "block-ark": "github:sifive/block-ark",
     "chai": "^4.2.0",
     "eslint": "^5.16.0",
@@ -36,7 +36,7 @@
     "extends": "@drom/eslint-config/eslint4/node8"
   },
   "dependencies": {
-    "duh-core": "github:sifive/duh-core",
+    "duh-core": "^0.2.0",
     "fs-extra": "^7.0.1",
     "lodash.get": "^4.4.2",
     "yargs": "^13.2.2"
