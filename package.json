@@ -7,7 +7,7 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "eslint lib && nyc --reporter=lcov mocha"
+    "test": "eslint lib && nyc -r=text -r=lcov mocha"
   },
   "bin": {
     "duh-export-scala": "./bin/duh-export-scala.js"
@@ -24,7 +24,7 @@
   "homepage": "https://github.com/sifive/duh-scala#readme",
   "devDependencies": {
     "@drom/eslint-config": "^0.10.0",
-    "block-ark": "github:sifive/block-ark",
+    "@sifive/block-ark": "github:sifive/block-ark",
     "chai": "^4.2.0",
     "eslint": "^5.16.0",
     "json-refs": "^3.0.13",
