@@ -7,7 +7,7 @@ const duhCore = require('duh-core');
 const lib = require('../lib/index.js');
 
 require('json5/lib/register');
-const ark = require('block-ark');
+const ark = require('@sifive/block-ark');
 
 const expect = chai.expect;
 
