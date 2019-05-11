@@ -1,6 +1,6 @@
 {
   "name": "duh-scala",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "DUH component export to Scala",
   "main": "lib/index.js",
   "directories": {
