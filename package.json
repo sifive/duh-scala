@@ -39,6 +39,7 @@
     "duh-core": "^0.2.0",
     "fs-extra": "^7.0.1",
     "lodash.get": "^4.4.2",
+    "scalameta-parsers": "^2.0.1",
     "yargs": "^13.2.2"
   }
 }
