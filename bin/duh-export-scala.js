@@ -4,10 +4,13 @@
 const path = require('path');
 const fs = require('fs-extra');
 const yargs = require('yargs');
+const scalametaParsers = require('scalameta-parsers');
 
 const duhCore = require('duh-core');
 
 const lib = require('../lib/index.js');
+
+const parseSource = scalametaParsers.parseSource;
 
 const argv = yargs
   .option('output', {
@@ -31,12 +34,30 @@ const flow = async argv => {
   // await fs.outputFile(headerFile, genHeaderFile(duh1));
 
   // generate Scala wrapper
-  const baseFile = `${dir}/${duh1.component.name}-base.scala`;
-  await fs.outputFile(baseFile, lib.exportScalaBase(duh1));
+  {
+    const name = `${dir}/${duh1.component.name}-base.scala`;
+    const body = lib.exportScalaBase(duh1);
+    await fs.outputFile(name, body);
+    const ast = parseSource.call({}, body);
+    if (ast.error) {
+      console.error(ast);
+      const e = new SyntaxError(ast.error);
+      throw e;
+    }
+  }
 
-  const userFile = `${dir}/${duh1.component.name}.scala`;
-  if (!(await fs.pathExists(userFile))) {
-    await fs.outputFile(userFile, lib.exportScalaUser(duh1));
+  {
+    const name = `${dir}/${duh1.component.name}.scala`;
+    if (!(await fs.pathExists(name))) {
+      const body = lib.exportScalaUser(duh1);
+      await fs.outputFile(name, body);
+      const ast = parseSource.call({}, body);
+      if (ast.error) {
+        console.error(ast);
+        const e = new SyntaxError(ast.error);
+        throw e;
+      }
+    }
   }
 };
 
