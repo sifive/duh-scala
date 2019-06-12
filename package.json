@@ -7,7 +7,7 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "eslint lib && nyc -r=text -r=lcov mocha"
+    "test": "eslint lib && mocha test && nyc -r=text -r=lcov mocha test"
   },
   "bin": {
     "duh-export-scala": "./bin/duh-export-scala.js"
@@ -30,16 +30,19 @@
     "json-refs": "^3.0.13",
     "json5": "^2.1.0",
     "mocha": "^6.1.4",
-    "nyc": "^14.0.0"
+    "nyc": "^14.1.1"
+  },
+  "engines": {
+    "node": ">=6"
   },
   "eslintConfig": {
     "extends": "@drom/eslint-config/eslint4/node8"
   },
   "dependencies": {
-    "duh-core": "^0.2.0",
-    "fs-extra": "^7.0.1",
+    "duh-core": "^0.4.0",
+    "fs-extra": "^8.0.1",
     "lodash.get": "^4.4.2",
     "scalameta-parsers": "^2.0.1",
-    "yargs": "^13.2.2"
+    "yargs": "^13.3.0"
   }
 }
