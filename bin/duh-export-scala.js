@@ -18,58 +18,67 @@ const argv = yargs
     describe: 'output path for exported files',
     default: 'component/src'
   })
+  .option('validate', {
+    alias: 'val',
+    describe: 'validate output Scala',
+    default: false,
+    type: 'boolean'
+  })
   .version()
   .help()
   .argv;
 
-const flow = async argv => {
-  if (argv.verbose) console.log('generate');
-  const duh = await duhCore.readDuh(argv);
-  const duh1 = await duhCore.expandAll(duh);
-  // const moduleName = duh.component.name;
+const flow = argv => new Promise (resolve => {
   const dir = argv.output;
+  if (argv.verbose) console.log('generate');
+  duhCore.readDuh(argv)
+    .then(duhCore.expandAll)
+    .then(duh1 => {
+      // const moduleName = duh.component.name;
+      // generate .h file
+      // const headerFile = `${dir}/${duh1.component.name}.h`;
+      // await fs.outputFile(headerFile, genHeaderFile(duh1));
 
-  // generate .h file
-  // const headerFile = `${dir}/${duh1.component.name}.h`;
-  // await fs.outputFile(headerFile, genHeaderFile(duh1));
-
-  // generate Scala wrapper
-  {
-    const name = `${dir}/${duh1.component.name}-base.scala`;
-    const body = lib.exportScalaBase(duh1);
-    await fs.outputFile(name, body);
-    const ast = parseSource.call({}, body);
-    if (ast.error) {
-      console.error(ast);
-      const e = new SyntaxError(ast.error);
-      throw e;
-    }
-  }
-
-  {
-    const name = `${dir}/${duh1.component.name}.scala`;
-    if (!(await fs.pathExists(name))) {
-      const body = lib.exportScalaUser(duh1);
-      await fs.outputFile(name, body);
-      const ast = parseSource.call({}, body);
-      if (ast.error) {
-        console.error(ast);
-        const e = new SyntaxError(ast.error);
-        throw e;
+      {
+        // generate Scala wrapper
+        const name = `${dir}/${duh1.component.name}-base.scala`;
+        const body = lib.exportScalaBase(duh1);
+        fs.outputFile(name, body);
+        if (argv.validate) {
+          const ast = parseSource.call({}, body);
+          if (ast.error) {
+            console.error(ast);
+            const e = new SyntaxError(ast.error);
+            throw e;
+          }
+        }
       }
-    }
-  }
-};
+      {
+        const name = `${dir}/${duh1.component.name}.scala`;
+        fs.pathExists(name).then(exists => {
+          if (!exists) {
+            const body = lib.exportScalaUser(duh1);
+            fs.outputFile(name, body);
+            if (argv.validate) {
+              const ast = parseSource.call({}, body);
+              if (ast.error) {
+                console.error(ast);
+                const e = new SyntaxError(ast.error);
+                throw e;
+              }
+            }
+          }
+        });
+      }
+      resolve();
+    });
+  });
 
-async function main(argv) {
+const main = argv => {
   const cwd = process.cwd();
   const folderName = path.basename(cwd);
   const fileName = argv._[0] || folderName + '.json5';
-
-  await flow({
-    filename: fileName,
-    output: argv.output
-  });
-}
+  flow(Object.assign({filename: fileName}, argv));
+};
 
 main(argv);
