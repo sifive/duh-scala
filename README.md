@@ -23,4 +23,4 @@ npm test
 ```
 
 ## License
-Apache 2.0 [LICENSE](https://github.com/sifive/duh-scala/blob/master/LICENSE).
+Apache 2.0 [LICENSE](LICENSE).
