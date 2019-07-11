@@ -72,7 +72,7 @@ const flow = argv => new Promise (resolve => {
       }
       resolve();
     });
-  });
+});
 
 const main = argv => {
   const cwd = process.cwd();
@@ -82,3 +82,4 @@ const main = argv => {
 };
 
 main(argv);
+/* eslint no-console: 0 */
