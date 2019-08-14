@@ -34,14 +34,14 @@ const fixupPortDirections = duh => new Promise((resolve) => {
   if (duh.component !== undefined) {
     const model = duh.component.model;
     model.ports = model.ports.map(port => {
-      const wire = port.wire
+      const wire = port.wire;
       wire.direction = wire.analog ? wire.analog : wire.direction;
       return port;
     });
   }
 
   resolve(duh);
-})
+});
 
 const flow = argv => new Promise (resolve => {
   const dir = argv.output;
