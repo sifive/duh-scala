@@ -29,8 +29,6 @@ const argv = yargs
   .argv;
 
 const fixupPortDirections = duh => new Promise((resolve) => {
-
-  // expand ports
   if (duh.component !== undefined) {
     const model = duh.component.model;
     model.ports = model.ports.map(port => {
