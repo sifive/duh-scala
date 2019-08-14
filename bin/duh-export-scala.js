@@ -28,11 +28,25 @@ const argv = yargs
   .help()
   .argv;
 
+const fixupPortDirections = duh => new Promise((resolve) => {
+  if (duh.component !== undefined) {
+    const model = duh.component.model;
+    model.ports = model.ports.map(port => {
+      const wire = port.wire;
+      wire.direction = wire.analog ? wire.analog : wire.direction;
+      return port;
+    });
+  }
+
+  resolve(duh);
+});
+
 const flow = argv => new Promise (resolve => {
   const dir = argv.output;
   if (argv.verbose) console.log('generate');
   duhCore.readDuh(argv)
     .then(duhCore.expandAll)
+    .then(fixupPortDirections)
     .then(duh1 => {
       // const moduleName = duh.component.name;
       // generate .h file
