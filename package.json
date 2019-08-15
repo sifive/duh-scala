@@ -39,7 +39,7 @@
     "extends": "@drom/eslint-config/eslint4/node8"
   },
   "dependencies": {
-    "duh-core": "^0.4.0",
+    "duh-core": "^0.5.0",
     "fs-extra": "^8.0.1",
     "lodash.get": "^4.4.2",
     "scalameta-parsers": "^2.0.1",
