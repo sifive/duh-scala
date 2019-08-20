@@ -42,7 +42,7 @@ const flow = argv => new Promise (resolve => {
             return;
           } else if (typeof node === 'string') {
 
-            const fileName = `${outputDir}/${path.reverse().join('/')}.scala`;
+            const fileName = `${outputDir}/${path.join('/')}.scala`;
 
             fs.outputFile(fileName, node);
 
