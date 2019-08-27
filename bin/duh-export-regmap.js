@@ -34,8 +34,8 @@ const flow = argv => new Promise (resolve => {
   if (argv.verbose) console.log('regmap');
   duhCore.readDuh(argv)
     .then(duhCore.expandAll)
-    .then(duh1 => {
-      const emittedRegMappers = lib.exportScalaRegMap(duh1.component);
+    .then(duh => {
+      const emittedRegMappers = lib.exportScalaRegMap(duh.component);
       traverseSpec({
         enter: (node, path) => {
           if (typeof node === 'object') {
