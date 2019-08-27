@@ -13,6 +13,10 @@ const expect = chai.expect;
 
 const comp = {
   component: {
+    name: 'empty',
+    version: '0.1.0',
+    vendor: 'duh',
+    library: 'duh',
     model: {
       ports: []
     },
