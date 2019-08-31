@@ -36,26 +36,27 @@ const flow = argv => new Promise (resolve => {
     .then(duhCore.expandAll)
     .then(duh => {
       const emittedRegMappers = lib.exportScalaRegMap(duh.component);
-      traverseSpec({
-        enter: (node, path) => {
-          if (typeof node === 'object') {
-            return;
-          } else if (typeof node === 'string') {
+      const writeFiles = (isBase) => traverseSpec({
+        leaf: (node, path) => {
+          const fileName = `${outputDir}/${path.join('/')}.scala`;
+          fs.pathExists(fileName).then(exists => {
+            if (!exists || isBase) {
 
-            const fileName = `${outputDir}/${path.join('/')}.scala`;
+              fs.outputFile(fileName, node);
 
-            fs.outputFile(fileName, node);
-
-            if (argv.validate) {
-              const ast = parseSource.call({}, node);
-              if (ast.error) {
-                console.error(ast);
-                throw new SyntaxError(ast.error);
+              if (argv.validate) {
+                const ast = parseSource.call({}, node);
+                if (ast.error) {
+                  console.error(ast);
+                  throw new SyntaxError(ast.error);
+                }
               }
             }
-          }
+          });
         }
-      })(emittedRegMappers);
+      });
+      writeFiles(true)(emittedRegMappers.base);
+      writeFiles(false)(emittedRegMappers.user);
       resolve();
     });
 });
