@@ -29,7 +29,7 @@
     "eslint": "^5.16.0",
     "json-refs": "^3.0.13",
     "json5": "^2.1.0",
-    "mocha": "^6.1.4",
+    "mocha": "^6.2.1",
     "nyc": "^14.1.1"
   },
   "engines": {
@@ -40,9 +40,9 @@
   },
   "dependencies": {
     "duh-core": "^0.5.0",
-    "fs-extra": "^8.0.1",
+    "fs-extra": "^8.1.0",
     "lodash.get": "^4.4.2",
-    "scalameta-parsers": "^2.0.1",
-    "yargs": "^13.3.0"
+    "scalameta-parsers": "^4.2.1",
+    "yargs": "^14.0.0"
   }
 }
