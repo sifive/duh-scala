@@ -24,7 +24,7 @@ duh-export-regmap <mycomp>.json5 -o <output-dir>
 ```
 
 To export a scala blackbox wrapper and attach method for a monitor. This is a
-special kind of `LazyModule` that can be attached to diplomatic edges
+special kind of chisel `Module` that can be attached to diplomatic edges
 corresponding to the monitor's bus interface type.
 ```bash
 duh-export-monitor <mycomp>.json5 -o <output-dir>
