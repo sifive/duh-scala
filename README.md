@@ -9,17 +9,23 @@ DUH component export to Scala
 npm i duh-scala
 ```
 
-To export a scala blackbox wrapper and attach method
+To export a scala blackbox wrapper and attach method. This is a scala `LazyModule`
+that has diplomatic nodes corresponding to the bus interfaces of the duh component.
 ```bash
 duh-export-scala <mycomp>.json5 -o <output-dir>
 ```
 
-To export a `RegisterRouter` corresponding the the `memoryMap`s in a duh component
+To export a `RegisterRouter` corresponding the the `memoryMap`s in a duh component.
+A `RegisterRouter` is an abstract scala description of memory-mapped registers that
+is generic to any bus interface. Concrete implementations for TileLink and AXI4 are
+included in the generated scala.
 ```bash
 duh-export-regmap <mycomp>.json5 -o <output-dir>
 ```
 
-To export a scala blackbox wrapper and attach method for a monitor
+To export a scala blackbox wrapper and attach method for a monitor. This is a
+special kind of `LazyModule` that can be attached to diplomatic edges
+corresponding to the monitor's bus interface type.
 ```bash
 duh-export-monitor <mycomp>.json5 -o <output-dir>
 ```
