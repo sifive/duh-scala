@@ -9,7 +9,7 @@ const scalametaParsers = require('scalameta-parsers');
 const duhCore = require('duh-core');
 
 const lib = require('../lib/index.js');
-const traverseSpec = require('../lib/traverse-spec');
+const traverseSpec = require('../lib/traverse-spec.js');
 
 const parseSource = scalametaParsers.parseSource;
 
