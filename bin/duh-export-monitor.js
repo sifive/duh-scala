@@ -26,8 +26,8 @@ const main = argv => {
   const cwd = process.cwd();
   const folderName = path.basename(cwd);
   const fileName = argv._[0] || folderName + '.json5';
-  if (argv.verbose) console.log('regmap');
-  lib.fileWriter(lib.exportScalaRegMap, Object.assign({filename: fileName}, argv));
+  if (argv.verbose) console.log('monitor');
+  lib.fileWriter(lib.exportScalaMonitor, Object.assign({filename: fileName}, argv));
 };
 
 main(argv);
