@@ -11,7 +11,9 @@
     "cover": "-r=text -r=lcov mocha test"
   },
   "bin": {
-    "duh-export-scala": "./bin/duh-export-scala.js"
+    "duh-export-scala": "./bin/duh-export-scala.js",
+    "duh-export-regmap": "./bin/duh-export-regmap.js",
+    "duh-export-monitor": "./bin/duh-export-monitor.js"
   },
   "repository": {
     "type": "git",
