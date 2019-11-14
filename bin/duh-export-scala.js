@@ -5,8 +5,6 @@ const path = require('path');
 const fs = require('fs-extra');
 const yargs = require('yargs');
 const scalametaParsers = require('scalameta-parsers');
-const Ajv = require('ajv');
-const schema = require('duh-schema');
 const duhCore = require('duh-core');
 
 const lib = require('../lib/index.js');
@@ -42,23 +40,11 @@ const fixupPortDirections = duh => new Promise((resolve) => {
   resolve(duh);
 });
 
-const validateSchema = duh => new Promise((resolve, reject) => {
-  const ajv = new Ajv;
-  const validate = ajv
-    .addSchema(schema.defs)
-    .compile(schema.any);
-  if (validate(duh)) {
-    resolve(duh);
-  } else {
-    reject(validate.errors);
-  }
-});
-
 const flow = argv => new Promise ((resolve, reject) => {
   const dir = argv.output;
   if (argv.verbose) console.log('generate');
   duhCore.readDuh(argv)
-    .then(validateSchema)
+    .then(duhCore.validateSchema)
     .then(duhCore.expandAll)
     .then(fixupPortDirections)
     .then(duh1 => {
