@@ -5,7 +5,8 @@ const path = require('path');
 const fs = require('fs-extra');
 const yargs = require('yargs');
 const scalametaParsers = require('scalameta-parsers');
-
+const Ajv = require('ajv');
+const schema = require('duh-schema');
 const duhCore = require('duh-core');
 
 const lib = require('../lib/index.js');
@@ -41,10 +42,23 @@ const fixupPortDirections = duh => new Promise((resolve) => {
   resolve(duh);
 });
 
-const flow = argv => new Promise (resolve => {
+const validateSchema = duh => new Promise((resolve, reject) => {
+  const ajv = new Ajv;
+  const validate = ajv
+    .addSchema(schema.defs)
+    .compile(schema.any);
+  if (validate(duh)) {
+    resolve(duh);
+  } else {
+    reject(validate.errors);
+  }
+});
+
+const flow = argv => new Promise ((resolve, reject) => {
   const dir = argv.output;
   if (argv.verbose) console.log('generate');
   duhCore.readDuh(argv)
+    .then(validateSchema)
     .then(duhCore.expandAll)
     .then(fixupPortDirections)
     .then(duh1 => {
@@ -85,14 +99,17 @@ const flow = argv => new Promise (resolve => {
         });
       }
       resolve();
-    });
+    })
+    .catch(reject);
 });
 
 const main = argv => {
   const cwd = process.cwd();
   const folderName = path.basename(cwd);
   const fileName = argv._[0] || folderName + '.json5';
-  flow(Object.assign({filename: fileName}, argv));
+  flow(Object.assign({filename: fileName}, argv)).catch(err => {
+    console.log(err);
+  });
 };
 
 main(argv);
