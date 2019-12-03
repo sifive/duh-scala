@@ -1,0 +1,34 @@
+def scalacOpts =
+  "-deprecation",
+  "-feature",
+  "-unchecked",
+  "-language:reflectiveCalls",
+  "-Xsource:2.11",
+  Nil
+
+global def duhScalaRoot = simplify "{here}/../../"
+
+global def duhScalaScalaModule =
+  makeScalaModuleFromJSON duhScalaRoot "duh-scala"
+  | setScalaModuleRootDir "{duhScalaRoot}/craft"
+  | setScalaModuleSourceDirs ("src", Nil)
+  | setScalaModuleDeps (rocketchipScalaModule, Nil)
+  | setScalaModuleScalacOptions scalacOpts
+  | addMacrosParadiseCompilerPlugin
+
+global def duhExportScala jsonFile =
+  def jars = scalaModuleClasspath duhScalaScalaModule
+  def classpath =
+    jars
+    | map getPathName
+    | catWith ":"
+  def cmdline =
+    "java",
+    "-cp", classpath,
+    "duh.scala.DUHScala",
+    jsonFile,
+    Nil
+  def inputs = source jsonFile, jars
+  makePlan cmdline inputs
+  | setPlanKeep False
+  | runJob

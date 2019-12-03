@@ -1,0 +1,8 @@
+{
+  "duh-scala": {
+    "scalaVersion": "2.12.8",
+    "dependencies": [
+      "com.lihaoyi::ujson:0.8.0"
+    ]
+  }
+}

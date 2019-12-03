@@ -1,0 +1,30 @@
+{
+  "component": {
+    "vendor": "sifive",
+    "library": "blocks",
+    "name": "pio",
+    "version": "0.1.0",
+    "busInterfaces": [],
+    "model": {
+      "views": [{
+        "name": "RTLview",
+        "displayName": "RTL View",
+        "description": "Simple RTL view of a component.",
+        "envIdentifier": "*Synthesis:",
+        "componentInstantiationRef": "VerilogModel"
+      }],
+      "ports": {
+        "in_wdata":    "dataWidth",
+        "in_wenable":  "dataWidth",
+        "in_rdata":    "-dataWidth",
+
+        "out_wdata":   "-dataWidth",
+        "out_wenable": "-dataWidth",
+        "out_rdata":   "dataWidth",
+
+        "irq0": -1,
+        "irq1": -1
+      }
+    }
+  }
+}
