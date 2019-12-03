@@ -93,6 +93,20 @@ package object decoders {
       }
     }
   }
+  def arrMap[T](fn: JValue => Result[T])(value: JValue): Result[Seq[T]] = value match {
+    case JArray(elements) =>
+      val (passes: Seq[Result[T]], fails: Seq[Result[T]]) =
+        elements.zipWithIndex.map({ case (value, index) =>
+          fn(value).swap.map(Error.Index(index, _)).swap
+        }).partition(_.isRight)
+
+      if (fails.nonEmpty) {
+        fail(Error.Multiple(fails.flatMap(_.swap.toSeq)))
+      } else {
+        pass(passes.flatMap(_.toSeq))
+      }
+    case _ => fail(Error.Failure(s"not a JObject"))
+  }
 
   def objMap[T](fn: (String, JValue) => Result[T])(value: JValue): Result[Seq[T]] = value match {
     case JObject(fields) =>

@@ -11,15 +11,17 @@ case class Component(
   pSchema: ParameterSchema) extends DUHType
 
 object Component {
-  def fromJSON(json: JValue): J.Result[Component] = {
+  def fromJSON[T](fn: Component => J.Result[T])(json: JValue): J.Result[T] = {
     J.map3(
       J.field("name", J.string),
       J.field("model",
-        J.field("ports", J.objMap(Port.fromJSON(_, _)))),
+        J.field("ports", J.oneOf(J.objMap(Port.fromJSON), J.arrMap(Port.fromJSON)))),
       J.field("model",
         J.field("pSchema", ParameterSchema.fromJSON)),
-      Component(_, _, _))(json)
+      Component(_, _, _))(json).flatMap(fn)
   }
+
+  def fromJSON(json: JValue): J.Result[Component] = fromJSON(J.pass(_: Component))(json)
 }
 
 sealed trait InterfaceMode extends DUHType
@@ -68,9 +70,11 @@ object Expression {
     }
   }
 
-  def fromJSON(json: JValue): J.Result[Expression] = {
-    J.oneOf(J.string(fromString), J.integer(fromInteger))(json)
+  def fromJSON[T](fn: Expression => J.Result[T])(json: JValue): J.Result[T] = {
+    J.oneOf(J.string(fromString), J.integer(fromInteger))(json).flatMap(fn)
   }
+
+  def fromJSON(json: JValue): J.Result[Expression] = fromJSON(J.pass(_: Expression))(json)
 
   def isInput(expr: Expression): Boolean = expr match {
     case Negate(expr) => !isInput(expr)
@@ -85,24 +89,26 @@ case class Wire(
   analogDirection: Option[Direction] = None)
 
 object Wire {
-  def fromExpression(expr: Expression): Wire = {
-    if (Expression.isInput(expr)) {
+  def fromExpression(expr: Expression): J.Result[Wire] = {
+    J.pass(if (Expression.isInput(expr)) {
       Wire(expr, Input)
     } else {
       Wire(Negate(expr), Output)
-    }
+    })
   }
 
-  def fromJSON(jvalue: JValue): J.Result[Wire] = {
+  def fromJSON[T](fn: Wire => J.Result[T])(json: JValue): J.Result[T] = {
     J.oneOf(
-      Expression.fromJSON(_).map(fromExpression),
+      Expression.fromJSON(fromExpression),
       J.map3(
         J.field("width", Expression.fromJSON),
         J.field("direction", J.string(Direction.fromString)),
         J.fieldOption("analog", J.string(Direction.fromString)),
         Wire(_, _, _))
-    )(jvalue)
+    )(json).flatMap(fn)
   }
+
+  def fromJSON(json: JValue): J.Result[Wire] = fromJSON(J.pass(_: Wire))(json)
 }
 
 case class Port(name: String, wire: Wire)
