@@ -49,7 +49,7 @@ package object decoders {
     }
   }
 
-  type Result[+T] = Either[Error, T]
+  type Result[T] = Either[Error, T]
 
   def fail(error: Error) = Left(error)
   def fail(cause: String) = Left(Error.Failure(cause))

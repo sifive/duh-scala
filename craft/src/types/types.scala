@@ -7,15 +7,18 @@ sealed trait DUHType
 
 case class Component(
   name: String,
-  ports: Seq[Port]) extends DUHType
+  ports: Seq[Port],
+  pSchema: ParameterSchema) extends DUHType
 
 object Component {
   def fromJSON(json: JValue): J.Result[Component] = {
-    J.map2(
+    J.map3(
       J.field("name", J.string),
       J.field("model",
         J.field("ports", J.objMap(Port.fromJSON(_, _)))),
-      Component(_, _))(json)
+      J.field("model",
+        J.field("pSchema", ParameterSchema.fromJSON)),
+      Component(_, _, _))(json)
   }
 }
 
@@ -40,8 +43,9 @@ object Direction {
   }
 }
 
+trait Literal
 trait Expression
-case class IntegerLiteral(value: BigInt) extends Expression
+case class IntegerLiteral(value: BigInt) extends Expression with Literal
 case class Parameter(name: String) extends Expression
 case class Negate(expr: Expression) extends Expression
 
@@ -113,5 +117,75 @@ object Port {
       J.field("name", J.string),
       Wire.fromJSON,
       Port(_, _))(json)
+  }
+}
+
+trait Constraint {
+  def satisfies(value: Literal): Boolean
+}
+
+case class Minimum(min: BigInt) extends Constraint {
+  def satisfies(value: BigInt): Boolean = value >= min
+
+  def satisfies(lit: Literal): Boolean = lit match {
+    case IntegerLiteral(value) => satisfies(value)
+  }
+}
+
+case class ExclusiveMinimum(min: BigInt) extends Constraint {
+  def satisfies(value: BigInt): Boolean = value > min
+
+  def satisfies(lit: Literal): Boolean = lit match {
+    case IntegerLiteral(value) => satisfies(value)
+  }
+}
+
+case class Maximum(max: BigInt) extends Constraint {
+  def satisfies(value: BigInt): Boolean = value <= max
+
+  def satisfies(lit: Literal): Boolean = lit match {
+    case IntegerLiteral(value) => satisfies(value)
+  }
+}
+
+case class ExclusiveMaximum(max: BigInt) extends Constraint {
+  def satisfies(value: BigInt): Boolean = value < max
+
+  def satisfies(lit: Literal): Boolean = lit match {
+    case IntegerLiteral(value) => satisfies(value)
+  }
+}
+
+case class Default(default: BigInt) extends Constraint {
+  def satisfies(lit: Literal): Boolean = true
+}
+
+object Constraint {
+  def fromJSON(name: String, json: JValue): J.Result[Option[Constraint]] = {
+    (name, J.integer(json)) match {
+      case ("minimum", int) => int.map(i => Some(Minimum(i)))
+      case ("exclusiveMinimum", int) => int.map(i => Some(ExclusiveMinimum(i)))
+      case ("maximum", int) => int.map(i => Some(Maximum(i)))
+      case ("exclusiveMaximum", int) => int.map(i => Some(ExclusiveMaximum(i)))
+      case ("default", int) => int.map(i => Some(Default(i)))
+      case _ => J.pass(None)
+    }
+  }
+}
+
+case class ParameterSchema(constraints: Map[Parameter, Seq[Constraint]], defaults: Map[Parameter, Literal])
+
+object ParameterSchema {
+  def fromJSON(json: JValue): J.Result[ParameterSchema] = {
+    J.field("type", J.string {
+      case "object" => J.pass(Unit)
+      case _ => J.fail("parameter schema must be type 'object'")
+    })(json).flatMap(_ => J.field("properties", J.objMap((name, constraints) => {
+      J.field("type", J.string({
+        case "integer" => J.pass(Unit)
+        case _: String => J.fail("only integer parameters are supported")
+      }))(constraints).flatMap(_ => J.objMap(Constraint.fromJSON)(constraints))
+        .map(Parameter(name) -> _.flatten)
+    }))(json).map(constraints => ParameterSchema(constraints.toMap, Map.empty)))
   }
 }
