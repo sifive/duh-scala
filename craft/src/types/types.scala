@@ -1,6 +1,7 @@
 package duh.scala.types
 
 import duh.scala.{decoders => J}
+import org.json4s.JsonAST._
 
 sealed trait DUHType
 
@@ -9,7 +10,7 @@ case class Component(
   ports: Seq[Port]) extends DUHType
 
 object Component {
-  def fromJSON(json: J.JValue): J.Result[Component] = {
+  def fromJSON(json: JValue): J.Result[Component] = {
     J.map2(
       J.field("name", J.string),
       J.field("model",
@@ -40,13 +41,13 @@ object Direction {
 }
 
 trait Expression
-case class IntegerLiteral(value: Int) extends Expression
+case class IntegerLiteral(value: BigInt) extends Expression
 case class Parameter(name: String) extends Expression
 case class Negate(expr: Expression) extends Expression
 
 object Expression {
-  def fromDouble(double: Double): J.Result[Expression] = {
-    J.pass(IntegerLiteral(double.toInt))
+  def fromInteger(integer: BigInt): J.Result[Expression] = {
+    J.pass(IntegerLiteral(integer))
   }
 
   def fromString(string: String): J.Result[Expression] = {
@@ -63,8 +64,8 @@ object Expression {
     }
   }
 
-  def fromJSON(json: J.JValue): J.Result[Expression] = {
-    J.oneOf(J.string(fromString), J.number(fromDouble))(json)
+  def fromJSON(json: JValue): J.Result[Expression] = {
+    J.oneOf(J.string(fromString), J.integer(fromInteger))(json)
   }
 
   def isInput(expr: Expression): Boolean = expr match {
@@ -88,7 +89,7 @@ object Wire {
     }
   }
 
-  def fromJSON(jvalue: ujson.Value): J.Result[Wire] = {
+  def fromJSON(jvalue: JValue): J.Result[Wire] = {
     J.oneOf(
       Expression.fromJSON(_).map(fromExpression),
       J.map3(
@@ -103,11 +104,11 @@ object Wire {
 case class Port(name: String, wire: Wire)
 
 object Port {
-  def fromJSON(name: String, jvalue: ujson.Value): J.Result[Port] = {
+  def fromJSON(name: String, jvalue: JValue): J.Result[Port] = {
     Wire.fromJSON(jvalue).map(w => Port(name, w))
   }
 
-  def fromJSON(json: J.JValue): J.Result[Port] = {
+  def fromJSON(json: JValue): J.Result[Port] = {
     J.map2(
       J.field("name", J.string),
       Wire.fromJSON,

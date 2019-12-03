@@ -2,7 +2,7 @@
   "duh-scala": {
     "scalaVersion": "2.12.8",
     "dependencies": [
-      "com.lihaoyi::ujson:0.8.0"
+      "org.json4s::json4s-jackson:3.6.1"
     ]
   }
 }

@@ -1,6 +1,8 @@
 // See LICENSE for license details.
 package duh.scala
 
+import org.json4s.JsonAST._
+
 package object decoders {
   sealed trait Error {
     def path: String
@@ -46,8 +48,6 @@ package object decoders {
       s"/${helper(1, error)}"
     }
   }
-
-  type JValue = ujson.Value
 
   type Result[+T] = Either[Error, T]
 
@@ -95,7 +95,7 @@ package object decoders {
   }
 
   def objMap[T](fn: (String, JValue) => Result[T])(value: JValue): Result[Seq[T]] = value match {
-    case ujson.Obj(fields) =>
+    case JObject(fields) =>
       val (passes: Seq[Result[T]], fails: Seq[Result[T]]) = fields.map({ case (field, value) =>
         fn(field, value).swap.map(Error.Field(field, _)).swap
       }).partition(_.isRight)
@@ -105,53 +105,53 @@ package object decoders {
       } else {
         pass(passes.flatMap(_.toSeq))
       }
-    case _ => fail(Error.Failure(s"not a ujson.Obj"))
+    case _ => fail(Error.Failure(s"not a JObject"))
   }
 
   def field[T](name: String, nextDecoder: JValue => Result[T])(value: JValue): Result[T] = value match {
-    case ujson.Obj(fields) => fields.find(_._1 == name) match {
+    case JObject(fields) => fields.find(_._1 == name) match {
       case Some((_, selected)) =>
         nextDecoder(selected).swap.map(Error.Field(name, _)).swap
       case None => fail(s"missing field '$name'")
     }
-    case _ => fail(Error.Failure(s"not a ujson.Obj"))
+    case _ => fail(Error.Failure(s"not a JObject"))
   }
 
   def fieldOption[T](name: String, someDecoder: JValue => Result[T])(value: JValue): Result[Option[T]] = value match {
-    case ujson.Obj(fields) => fields.find(_._1 == name) match {
+    case JObject(fields) => fields.find(_._1 == name) match {
       case Some((_, selected)) =>
         someDecoder(selected).map(value => Some(value)).swap.map(Error.Field(name, _)).swap
       case None => fail(s"missing field '$name'")
     }
-    case _ => fail(Error.Failure(s"not a ujson.Obj"))
+    case _ => fail(Error.Failure(s"not a JObject"))
   }
 
   def index[T](idx: Int, nextDecoder: JValue => Result[T])(value: JValue): Result[T] = value match {
-    case ujson.Arr(elements) => elements.lift(idx) match {
+    case JArray(elements) => elements.lift(idx) match {
       case Some(selected) =>
         nextDecoder(selected).swap.map(Error.Index(idx, _)).swap
       case None => fail(s"index $idx is out of bounds")
     }
-    case _ => fail(s"not a ujson.Arr")
+    case _ => fail(s"not a JArray")
   }
 
   def string[T](fn: String => Result[T])(value: JValue): Result[T] = value match {
-    case ujson.Str(str) => fn(str)
-    case _ => fail("not a ujson.Str")
+    case JString(str) => fn(str)
+    case _ => fail("not a JString")
   }
 
   def string(value: JValue): Result[String] = string(pass(_: String))(value)
 
-  def number[T](fn: Double => Result[T])(value: JValue): Result[T] = value match {
-    case ujson.Num(num) => fn(num)
-    case _ => fail("not a ujson.Num")
+  def integer[T](fn: BigInt => Result[T])(value: JValue): Result[T] = value match {
+    case JInt(num) => fn(num)
+    case _ => fail("not a JDouble")
   }
 
-  def number(value: JValue): Result[Double] = number(pass(_: Double))(value)
+  def integer(value: JValue): Result[BigInt] = integer(pass(_: BigInt))(value)
 
   def boolean[T](fn: Boolean => Result[T])(value: JValue): Result[T] = value match {
-    case ujson.Bool(bool) => fn(bool)
-    case _ => fail("not a ujson.Bool")
+    case JBool(bool) => fn(bool)
+    case _ => fail("not a JBool")
   }
 
   def boolean(value: JValue): Result[Boolean] = boolean(pass(_: Boolean))(value)

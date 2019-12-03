@@ -18,7 +18,7 @@ package object exporters {
   def toChisel(wire: DUH.Wire): Data = {
     val direction = wire.analogDirection.getOrElse(wire.direction)
     val width = wire.width match {
-      case DUH.IntegerLiteral(lit) => lit.W
+      case DUH.IntegerLiteral(lit) => lit.toInt.W
       case _ => 1234.W
     }
 
