@@ -9,17 +9,19 @@ import duh.scala.{types => DUH}
 
 object DUHScala extends App {
   args match {
-    case Array(duhDoc) =>
+    case Array(paramsJSON, duhDoc) =>
       val parsed = parse(new File(duhDoc))
+      val params = parse(new File(paramsJSON))
       val component = J.field("component", duh.scala.types.Component.fromJSON)(parsed)
-      println(component.map(c => Driver.toFirrtl(Driver.elaborate(() => new Module {
-        val bbox = Module(duh.scala.exporters.blackBox(c))
-        val io = IO(bbox.io.cloneType)
-        io <> bbox.io
+      println(component.map(comp => Driver.toFirrtl(Driver.elaborate(() => new Module {
+        val bbox = duh.scala.exporters.blackBox(params, comp)
+        val io = IO(bbox.map(_.io.cloneType).getOrElse(new Bundle {}))
+        bbox.map(_.io <> io)
+        bbox.swap.map(println)
       })).serialize))
-      println(component.map(_.pSchema))
+      println(component)
     case _ =>
-      Console.err.println("Must provide exactly one argument for DUH document file path")
+      Console.err.println("Must provide exactly two arguments for params file path and DUH document file path")
       System.exit(1)
   }
 }

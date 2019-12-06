@@ -2,6 +2,8 @@ package duh.scala.types
 
 import duh.scala.{decoders => J}
 import org.json4s.JsonAST._
+import scala.collection.immutable.ListMap
+import scala.util.matching.Regex
 
 sealed trait DUHType
 
@@ -45,11 +47,14 @@ object Direction {
   }
 }
 
-trait Literal
-trait Expression
-case class IntegerLiteral(value: BigInt) extends Expression with Literal
+sealed trait Expression
 case class Parameter(name: String) extends Expression
 case class Negate(expr: Expression) extends Expression
+
+sealed trait Literal extends Expression
+case class IntegerLiteral(value: BigInt) extends Literal
+case class StringLiteral(value: String) extends Literal
+case class DoubleLiteral(value: Double) extends Literal
 
 object Expression {
   def fromInteger(integer: BigInt): J.Result[Expression] = {
@@ -81,6 +86,15 @@ object Expression {
     case IntegerLiteral(value) => value >= 0
     case Parameter(_) => true
   }
+
+  def evaluate(expr: Expression, pSchema: ParameterSchema, params: JValue): J.Result[Literal] =
+    expr match {
+      case Parameter(name) => pSchema.getValue(name)(params)
+      case Negate(child) => evaluate(child, pSchema, params).flatMap {
+        case IntegerLiteral(value) => J.pass(IntegerLiteral(-value))
+      }
+      case lit: Literal => J.pass(lit)
+    }
 }
 
 case class Wire(
@@ -126,72 +140,241 @@ object Port {
   }
 }
 
-trait Constraint {
-  def satisfies(value: Literal): Boolean
+sealed trait Constraint[T] {
+  def satisfies(value: T): Boolean
 }
 
-case class Minimum(min: BigInt) extends Constraint {
-  def satisfies(value: BigInt): Boolean = value >= min
+sealed trait IntegerConstraint extends Constraint[BigInt]
 
-  def satisfies(lit: Literal): Boolean = lit match {
-    case IntegerLiteral(value) => satisfies(value)
+object IntegerConstraint {
+  case class Minimum(min: BigInt) extends IntegerConstraint {
+    def satisfies(value: BigInt): Boolean = value >= min
   }
-}
 
-case class ExclusiveMinimum(min: BigInt) extends Constraint {
-  def satisfies(value: BigInt): Boolean = value > min
-
-  def satisfies(lit: Literal): Boolean = lit match {
-    case IntegerLiteral(value) => satisfies(value)
+  case class ExclusiveMinimum(min: BigInt) extends IntegerConstraint {
+    def satisfies(value: BigInt): Boolean = value > min
   }
-}
 
-case class Maximum(max: BigInt) extends Constraint {
-  def satisfies(value: BigInt): Boolean = value <= max
-
-  def satisfies(lit: Literal): Boolean = lit match {
-    case IntegerLiteral(value) => satisfies(value)
+  case class Maximum(max: BigInt) extends IntegerConstraint {
+    def satisfies(value: BigInt): Boolean = value <= max
   }
-}
 
-case class ExclusiveMaximum(max: BigInt) extends Constraint {
-  def satisfies(value: BigInt): Boolean = value < max
-
-  def satisfies(lit: Literal): Boolean = lit match {
-    case IntegerLiteral(value) => satisfies(value)
+  case class ExclusiveMaximum(max: BigInt) extends IntegerConstraint {
+    def satisfies(value: BigInt): Boolean = value < max
   }
-}
 
-case class Default(default: BigInt) extends Constraint {
-  def satisfies(lit: Literal): Boolean = true
-}
-
-object Constraint {
-  def fromJSON(name: String, json: JValue): J.Result[Option[Constraint]] = {
+  def fromJSON(name: String, json: JValue): J.Result[Option[IntegerConstraint]] = {
     (name, J.integer(json)) match {
       case ("minimum", int) => int.map(i => Some(Minimum(i)))
       case ("exclusiveMinimum", int) => int.map(i => Some(ExclusiveMinimum(i)))
       case ("maximum", int) => int.map(i => Some(Maximum(i)))
       case ("exclusiveMaximum", int) => int.map(i => Some(ExclusiveMaximum(i)))
-      case ("default", int) => int.map(i => Some(Default(i)))
       case _ => J.pass(None)
+    }
+  }
+
+  def collectFromJSON(json: JValue): J.Result[Seq[IntegerConstraint]] = {
+    J.hasType("integer",
+      J.objMap(fromJSON))(json).map { constraints => constraints.flatten
     }
   }
 }
 
-case class ParameterSchema(constraints: Map[Parameter, Seq[Constraint]], defaults: Map[Parameter, Literal])
+sealed trait DoubleConstraint extends Constraint[Double]
+
+object DoubleConstraint {
+  case class Minimum(min: Double) extends DoubleConstraint {
+    def satisfies(value: Double): Boolean = value >= min
+  }
+
+  case class ExclusiveMinimum(min: Double) extends DoubleConstraint {
+    def satisfies(value: Double): Boolean = value > min
+  }
+
+  case class Maximum(max: Double) extends DoubleConstraint {
+    def satisfies(value: Double): Boolean = value <= max
+  }
+
+  case class ExclusiveMaximum(max: Double) extends DoubleConstraint {
+    def satisfies(value: Double): Boolean = value < max
+  }
+
+  def fromJSON(name: String, json: JValue): J.Result[Option[DoubleConstraint]] = {
+    (name, J.double(json)) match {
+      case ("minimum", double) => double.map(d => Some(Minimum(d)))
+      case ("exclusiveMinimum", double) => double.map(d => Some(ExclusiveMinimum(d)))
+      case ("maximum", double) => double.map(d => Some(Maximum(d)))
+      case ("exclusiveMaximum", double) => double.map(d => Some(ExclusiveMaximum(d)))
+      case _ => J.pass(None)
+    }
+  }
+
+  def collectFromJSON(json: JValue): J.Result[Seq[DoubleConstraint]] = {
+    J.hasType("number",
+      J.objMap(fromJSON))(json).map { constraints => constraints.flatten
+    }
+  }
+}
+
+sealed trait StringConstraint extends Constraint[String]
+
+object StringConstraint {
+  case class MinLength(min: BigInt) extends StringConstraint {
+    def satisfies(value: String): Boolean = value.length >= min
+  }
+
+  case class MaxLength(max: BigInt) extends StringConstraint {
+    def satisfies(value: String): Boolean = value.length <= max
+  }
+
+  case class Pattern(regex: Regex) extends StringConstraint {
+    def satisfies(value: String): Boolean = value match {
+      case regex(_*) => true
+      case _ => false
+    }
+  }
+
+  def fromJSON(name: String, json: JValue): J.Result[Option[StringConstraint]] = {
+    (name, json) match {
+      case ("minLength", length) => J.integer(length).map(s => Some(MinLength(s)))
+      case ("maxLength", length) => J.integer(length).map(s => Some(MaxLength(s)))
+      case ("pattern", regex) => J.string(regex).map(s => Some(Pattern(s.r)))
+      case _ => J.pass(None)
+    }
+  }
+
+  def collectFromJSON(json: JValue): J.Result[Seq[StringConstraint]] = {
+    J.hasType("string",
+      J.objMap(fromJSON))(json).map { constraints => constraints.flatten
+    }
+  }
+}
+
+sealed trait ParameterDefinition {
+  type ParamType
+
+  def name: String
+  def default: Option[ParamType]
+  def constraints: Seq[Constraint[ParamType]]
+
+  protected def fromJSONImp(json: JValue): J.Result[ParamType]
+  
+  final def fromJSON(json: JValue): J.Result[ParamType] = {
+    fromJSONImp(json).flatMap {
+      case value if constraints.forall(_.satisfies(value)) => J.pass(value)
+      case value => J.fail(s"$value does not satisfy constraints")
+    }
+  }
+}
+
+object ParameterDefinition {
+  def fromJSON(name: String, json: JValue): J.Result[ParameterDefinition] = {
+    J.oneOf(
+      IntegerParameter.fromJSON(name, _),
+      DoubleParameter.fromJSON(name, _),
+      StringParameter.fromJSON(name, _)
+    )(json)
+  }
+}
+
+case class IntegerParameter(
+  name: String,
+  default: Option[BigInt],
+  constraints: Seq[IntegerConstraint]) extends ParameterDefinition {
+  type ParamType = BigInt
+  def fromJSONImp(json: JValue) = J.fieldOption(name, J.integer)(json).flatMap {
+    case Some(value) => J.pass(value)
+    case None => default match {
+      case Some(value) => J.pass(value)
+      case None => J.fail(s"no parameter named '$name'")
+    }
+  }
+}
+
+object IntegerParameter {
+  def fromJSON(name: String, json: JValue): J.Result[IntegerParameter] = {
+    J.map2(
+      J.fieldOption("default", J.integer),
+      IntegerConstraint.collectFromJSON,
+      IntegerParameter(name, _, _)
+    )(json)
+  }
+}
+
+case class DoubleParameter(
+  name: String,
+  default: Option[Double],
+  constraints: Seq[DoubleConstraint]) extends ParameterDefinition {
+  type ParamType = Double
+  def fromJSONImp(json: JValue) = J.double(json)
+}
+
+object DoubleParameter {
+  def fromJSON(name: String, json: JValue): J.Result[DoubleParameter] = {
+    J.map2(
+      J.fieldOption("default", J.double),
+      DoubleConstraint.collectFromJSON,
+      DoubleParameter(name, _, _)
+    )(json)
+  }
+}
+
+case class StringParameter(
+  name: String,
+  default: Option[String],
+  constraints: Seq[StringConstraint]) extends ParameterDefinition {
+  type ParamType = String
+  def fromJSONImp(json: JValue) = J.string(json)
+}
+
+object StringParameter {
+  def fromJSON(name: String, json: JValue): J.Result[StringParameter] = {
+    J.map2(
+      J.fieldOption("default", J.string),
+      StringConstraint.collectFromJSON,
+      StringParameter(name, _, _)
+    )(json)
+  }
+}
+
+case class ParameterSchema(definitions: Seq[ParameterDefinition]) {
+  private val nameMap = definitions.map(p => p.name -> p).toMap.lift
+
+  def getValue(name: String)(json: JValue): J.Result[Literal] = {
+    J.oneOf(
+      getIntegerValue(name)(_).map(IntegerLiteral),
+    )(json)
+  }
+
+  def getIntegerValue(name: String)(json: JValue): J.Result[BigInt] = {
+    nameMap(name) match {
+      case Some(paramDef: IntegerParameter) => paramDef.fromJSON(json)
+      case Some(paramDef) => J.fail(s"parameter '$name' is not defined as an integer in parameter schema")
+      case None => J.fail(s"no parameter named '$name' defined in parameter schema")
+    }
+  }
+
+  def getDoubleValue(name: String)(json: JValue): J.Result[Double] = {
+    nameMap(name) match {
+      case Some(paramDef: DoubleParameter) => paramDef.fromJSON(json)
+      case Some(paramDef) => J.fail(s"parameter '$name' is not defined as a double in parameter schema")
+      case None => J.fail(s"no parameter named '$name' defined in parameter schema")
+    }
+  }
+
+  def getStringValue(name: String)(json: JValue): J.Result[String] = {
+    nameMap(name) match {
+      case Some(paramDef: StringParameter) => paramDef.fromJSON(json)
+      case Some(paramDef) => J.fail(s"parameter '$name' is not defined as a string in parameter schema")
+      case None => J.fail(s"no parameter named '$name' defined in parameter schema")
+    }
+  }
+}
 
 object ParameterSchema {
   def fromJSON(json: JValue): J.Result[ParameterSchema] = {
-    J.field("type", J.string {
-      case "object" => J.pass(Unit)
-      case _ => J.fail("parameter schema must be type 'object'")
-    })(json).flatMap(_ => J.field("properties", J.objMap((name, constraints) => {
-      J.field("type", J.string({
-        case "integer" => J.pass(Unit)
-        case _: String => J.fail("only integer parameters are supported")
-      }))(constraints).flatMap(_ => J.objMap(Constraint.fromJSON)(constraints))
-        .map(Parameter(name) -> _.flatten)
-    }))(json).map(constraints => ParameterSchema(constraints.toMap, Map.empty)))
+    J.hasType("object",
+      J.field("properties", J.objMap(ParameterDefinition.fromJSON)))(json)
+        .map(ParameterSchema(_))
   }
 }

@@ -16,7 +16,7 @@ global def duhScalaScalaModule =
   | setScalaModuleScalacOptions scalacOpts
   | addMacrosParadiseCompilerPlugin
 
-global def duhExportScala jsonFile =
+global def duhExportScala paramsFile jsonFile =
   def jars = scalaModuleClasspath duhScalaScalaModule
   def classpath =
     jars
@@ -26,9 +26,10 @@ global def duhExportScala jsonFile =
     "java",
     "-cp", classpath,
     "duh.scala.DUHScala",
+    paramsFile,
     jsonFile,
     Nil
-  def inputs = source jsonFile, jars
+  def inputs = makeStatePath paramsFile, makeStatePath jsonFile, jars
   makePlan cmdline inputs
   | setPlanKeep False
   | runJob

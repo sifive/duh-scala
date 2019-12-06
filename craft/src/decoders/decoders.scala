@@ -50,12 +50,13 @@ package object decoders {
   }
 
   type Result[T] = Either[Error, T]
+  type Decoder[T] = JValue => Result[T]
 
-  def fail(error: Error) = Left(error)
-  def fail(cause: String) = Left(Error.Failure(cause))
-  def pass[T](value: T) = Right(value)
+  def fail(error: Error): Result[Nothing] = Left(error)
+  def fail(cause: String): Result[Nothing] = Left(Error.Failure(cause))
+  def pass[T](value: T): Result[T] = Right(value)
 
-  def oneOf[T](fns: (JValue => Result[T])*)(value: JValue): Result[T] = {
+  def oneOf[T](fns: Decoder[T]*)(value: JValue): Result[T] = {
     val (passes, fails) = fns.map(_.apply(value)).partition(_.isRight)
     passes match {
       case Seq(head) => head
@@ -65,8 +66,8 @@ package object decoders {
   }
 
   def map2[A, B, C](
-    fn0: JValue => Result[A],
-    fn1: JValue => Result[B],
+    fn0: Decoder[A],
+    fn1: Decoder[B],
     combiner: (A, B) => C)(value: JValue): Result[C] = {
     fn0(value) match {
       case Left(e) => fail(e)
@@ -78,9 +79,9 @@ package object decoders {
   }
 
   def map3[A, B, C, D](
-    fn0: JValue => Result[A],
-    fn1: JValue => Result[B],
-    fn2: JValue => Result[C],
+    fn0: Decoder[A],
+    fn1: Decoder[B],
+    fn2: Decoder[C],
     combiner: (A, B, C) => D)(value: JValue): Result[D] = {
     fn0(value) match {
       case Left(e) => fail(e)
@@ -93,7 +94,8 @@ package object decoders {
       }
     }
   }
-  def arrMap[T](fn: JValue => Result[T])(value: JValue): Result[Seq[T]] = value match {
+
+  def arrMap[T](fn: Decoder[T])(value: JValue): Result[Seq[T]] = value match {
     case JArray(elements) =>
       val (passes: Seq[Result[T]], fails: Seq[Result[T]]) =
         elements.zipWithIndex.map({ case (value, index) =>
@@ -122,25 +124,26 @@ package object decoders {
     case _ => fail(Error.Failure(s"not a JObject"))
   }
 
-  def field[T](name: String, nextDecoder: JValue => Result[T])(value: JValue): Result[T] = value match {
-    case JObject(fields) => fields.find(_._1 == name) match {
-      case Some((_, selected)) =>
+  def field[T](name: String, nextDecoder: Decoder[T])(value: JValue): Result[T] = value match {
+    case JObject(fields) => fields.filter(_._1 == name) match {
+      case List((_, selected)) =>
         nextDecoder(selected).swap.map(Error.Field(name, _)).swap
-      case None => fail(s"missing field '$name'")
+      case List() => fail(s"missing field '$name'")
+      case _ => fail (s"more than one fields named '$name'")
     }
     case _ => fail(Error.Failure(s"not a JObject"))
   }
 
-  def fieldOption[T](name: String, someDecoder: JValue => Result[T])(value: JValue): Result[Option[T]] = value match {
+  def fieldOption[T](name: String, someDecoder: Decoder[T])(value: JValue): Result[Option[T]] = value match {
     case JObject(fields) => fields.find(_._1 == name) match {
       case Some((_, selected)) =>
         someDecoder(selected).map(value => Some(value)).swap.map(Error.Field(name, _)).swap
-      case None => fail(s"missing field '$name'")
+      case None => pass(None)
     }
     case _ => fail(Error.Failure(s"not a JObject"))
   }
 
-  def index[T](idx: Int, nextDecoder: JValue => Result[T])(value: JValue): Result[T] = value match {
+  def index[T](idx: Int, nextDecoder: Decoder[T])(value: JValue): Result[T] = value match {
     case JArray(elements) => elements.lift(idx) match {
       case Some(selected) =>
         nextDecoder(selected).swap.map(Error.Index(idx, _)).swap
@@ -149,6 +152,14 @@ package object decoders {
     case _ => fail(s"not a JArray")
   }
 
+  def hasType[T](Type: String, nextDecoder: Decoder[T])(json: JValue) = {
+    field("type", string {
+      case Type => nextDecoder(json)
+      case _ => fail(s"type field must be '${Type}'")
+    })(json)
+  }
+
+
   def string[T](fn: String => Result[T])(value: JValue): Result[T] = value match {
     case JString(str) => fn(str)
     case _ => fail("not a JString")
@@ -156,12 +167,22 @@ package object decoders {
 
   def string(value: JValue): Result[String] = string(pass(_: String))(value)
 
+
   def integer[T](fn: BigInt => Result[T])(value: JValue): Result[T] = value match {
     case JInt(num) => fn(num)
-    case _ => fail("not a JDouble")
+    case _ => fail("not a JInt")
   }
 
   def integer(value: JValue): Result[BigInt] = integer(pass(_: BigInt))(value)
+
+
+  def double[T](fn: Double => Result[T])(value: JValue): Result[T] = value match {
+    case JDouble(num) => fn(num)
+    case _ => fail("not a JDouble")
+  }
+
+  def double(value: JValue): Result[Double] = double(pass(_: Double))(value)
+
 
   def boolean[T](fn: Boolean => Result[T])(value: JValue): Result[T] = value match {
     case JBool(bool) => fn(bool)

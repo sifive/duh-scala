@@ -13,9 +13,25 @@
         "envIdentifier": "*Synthesis:",
         "componentInstantiationRef": "VerilogModel"
       }],
+
+      "aports": [
+        {
+          "name": "asdf",
+          "direction": "in",
+          "width": 2,
+          "analog": "out"
+        },
+        {
+          "name": "lkj",
+          "direction": "out",
+          "width": 10,
+          "analog": "inout"
+        }
+      ],
+
       "ports": {
-        "in_wdata":    "dataWidth",
-        "in_wenable":  "dataWidth",
+        "in_wdata":    1,
+        "in_wenable":  "asdf",
         "in_rdata":    "-dataWidth",
 
         "out_wdata":   "-dataWidth",
@@ -25,10 +41,18 @@
         "irq0": -1,
         "irq1": -1
       },
+
       "pSchema": {
         "type": "object",
         "properties": {
           "dataWidth": {
+            "title": "Number of IO pads",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32,
+            "default": 32
+          },
+          "asdf": {
             "title": "Number of IO pads",
             "type": "integer",
             "minimum": 1,
