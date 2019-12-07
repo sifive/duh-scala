@@ -395,16 +395,23 @@ case class StandardBusInterface(
   version: String) extends BusInterfaceType
 case class NonStandardBusInterface(name: String) extends BusInterfaceType
 
+object StandardBusInterface {
+  def fromJSON(json: JValue): J.Result[StandardBusInterface] = {
+    J.map4(
+      J.field("vendor", J.string),
+      J.field("library", J.string),
+      J.field("name", J.string),
+      J.field("version", J.string),
+      StandardBusInterface(_, _, _, _))(json)
+  }
+}
+
+
 object BusInterfaceType {
   def fromJSON(json: JValue): J.Result[BusInterfaceType] = {
     J.oneOf(
       J.string(n => J.pass(NonStandardBusInterface(n))),
-      J.map4(
-        J.field("vendor", J.string),
-        J.field("library", J.string),
-        J.field("name", J.string),
-        J.field("version", J.string),
-        StandardBusInterface(_, _, _, _))
+      StandardBusInterface.fromJSON
     )(json)
   }
 }
@@ -447,8 +454,8 @@ object BusInterface {
   }
 }
 
-case class BusDefinition(busType: StandardBusInterface, description: Option[String])
 case class BusPortDefinition(
+  name: String,
   description: Option[String],
   onMaster: BusWireDefinition,
   onSlave: BusWireDefinition,
@@ -456,21 +463,23 @@ case class BusPortDefinition(
   isClock: Boolean,
   requiresDriver: Boolean
 )
+
 trait BusPresence
 case object Optional extends BusPresence
 case object Required extends BusPresence
-case class BusWireDefinition(presence: BusPresence, width: BigInt, direction: Direction)
+case class BusWireDefinition(presence: BusPresence, width: Expression, direction: Direction)
 
 object BusWireDefinition {
   def fromJSON(json: JValue): J.Result[BusWireDefinition] = {
     J.map3(
-      J.string {
+      J.field("presence", J.string {
         case "optional" => J.pass(Optional)
         case "required" => J.pass(Required)
         case other => J.fail(s"'$other' is not a valid bus wire presence value")
-      },
-      J.fieldOption("width", J.integer)(_).map(_.getOrElse(BigInt(1))),
-      Direction.fromJSON,
+      }),
+      J.fieldOption("width", Expression.fromJSON)(_)
+        .map(_.getOrElse(IntegerLiteral(BigInt(1)))),
+      J.field("direction", Direction.fromJSON),
       BusWireDefinition(_, _, _)
     )(json)
   }
@@ -479,7 +488,7 @@ object BusWireDefinition {
 object BusPortDefinition {
   case class WirePair(onMaster: BusWireDefinition, onSlave: BusWireDefinition)
 
-  def fromJSON(json: JValue): J.Result[BusPortDefinition] = {
+  def fromJSON(name: String, json: JValue): J.Result[BusPortDefinition] = {
     J.map5(
       J.fieldOption("description", J.string),
       J.field("wire", J.map2(
@@ -492,12 +501,29 @@ object BusPortDefinition {
       J.fieldOption("requiresDriver", J.boolean)(_).map(_.getOrElse(false)),
       (desc: Option[String], wire: WirePair, default: Option[BigInt], isClock: Boolean, requiresDriver: Boolean) =>
         BusPortDefinition(
+          name,
           desc,
           wire.onMaster,
           wire.onSlave,
           default,
           isClock,
           requiresDriver)
+    )(json)
+  }
+}
+
+case class BusDefinition(
+  busType: StandardBusInterface,
+  description: Option[String],
+  ports: Seq[BusPortDefinition])
+
+object BusDefinition {
+  def fromJSON(json: JValue): J.Result[BusDefinition] = {
+    J.map3(
+      StandardBusInterface.fromJSON,
+      J.fieldOption("description", J.string),
+      J.field("ports", J.objMap(BusPortDefinition.fromJSON)),
+      BusDefinition(_, _, _)
     )(json)
   }
 }

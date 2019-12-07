@@ -26,10 +26,29 @@ global def duhExportScala paramsFile jsonFile =
     "java",
     "-cp", classpath,
     "duh.scala.DUHScala",
+    "component",
     paramsFile,
     jsonFile,
     Nil
   def inputs = makeStatePath paramsFile, makeStatePath jsonFile, jars
+  makePlan cmdline inputs
+  | setPlanKeep False
+  | runJob
+
+global def duhExportBus jsonFile =
+  def jars = scalaModuleClasspath duhScalaScalaModule
+  def classpath =
+    jars
+    | map getPathName
+    | catWith ":"
+  def cmdline =
+    "java",
+    "-cp", classpath,
+    "duh.scala.DUHScala",
+    "bus",
+    jsonFile,
+    Nil
+  def inputs = makeStatePath jsonFile, jars
   makePlan cmdline inputs
   | setPlanKeep False
   | runJob
