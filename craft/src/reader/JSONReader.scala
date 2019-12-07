@@ -14,10 +14,9 @@ object DUHScala extends App {
       val params = parse(new File(paramsJSON))
       val component = J.field("component", duh.scala.types.Component.fromJSON)(parsed)
       println(component.map(comp => Driver.toFirrtl(Driver.elaborate(() => new Module {
-        val bbox = duh.scala.exporters.blackBox(params, comp)
-        val io = IO(bbox.map(_.io.cloneType).getOrElse(new Bundle {}))
-        bbox.map(_.io <> io)
-        bbox.swap.map(println)
+        val bbox = J.get(duh.scala.exporters.blackBox(params, comp))
+        val io = IO(bbox.io.cloneType)
+        io <> bbox.io
       })).serialize))
       println(component)
     case _ =>

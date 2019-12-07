@@ -10,17 +10,18 @@ sealed trait DUHType
 case class Component(
   name: String,
   ports: Seq[Port],
-  pSchema: ParameterSchema) extends DUHType
+  pSchema: ParameterSchema,
+  busInterfaces: Seq[BusInterface]) extends DUHType
 
 object Component {
   def fromJSON[T](fn: Component => J.Result[T])(json: JValue): J.Result[T] = {
-    J.map3(
+    J.map4(
       J.field("name", J.string),
       J.field("model",
         J.field("ports", J.oneOf(J.objMap(Port.fromJSON), J.arrMap(Port.fromJSON)))),
-      J.field("model",
-        J.field("pSchema", ParameterSchema.fromJSON)),
-      Component(_, _, _))(json).flatMap(fn)
+      J.field("pSchema", ParameterSchema.fromJSON),
+      J.field("busInterfaces", J.arrMap(BusInterface.fromJSON)),
+      Component(_, _, _, _))(json).flatMap(fn)
   }
 
   def fromJSON(json: JValue): J.Result[Component] = fromJSON(J.pass(_: Component))(json)
@@ -37,6 +38,8 @@ case object Output extends Direction
 case object Inout extends Direction
 
 object Direction {
+  def fromJSON(json: JValue): J.Result[Direction] = J.string(fromString(_))(json)
+
   def fromString(string: String): J.Result[Direction] = {
     string match {
       case "in" => J.pass(Input)
@@ -376,5 +379,125 @@ object ParameterSchema {
     J.hasType("object",
       J.field("properties", J.objMap(ParameterDefinition.fromJSON)))(json)
         .map(ParameterSchema(_))
+  }
+}
+
+case class BusInterface(
+  busType: BusInterfaceType,
+  abstractionTypes: Seq[BusAbstractionType]
+)
+
+trait BusInterfaceType
+case class StandardBusInterface(
+  vendor: String,
+  library: String,
+  name: String,
+  version: String) extends BusInterfaceType
+case class NonStandardBusInterface(name: String) extends BusInterfaceType
+
+object BusInterfaceType {
+  def fromJSON(json: JValue): J.Result[BusInterfaceType] = {
+    J.oneOf(
+      J.string(n => J.pass(NonStandardBusInterface(n))),
+      J.map4(
+        J.field("vendor", J.string),
+        J.field("library", J.string),
+        J.field("name", J.string),
+        J.field("version", J.string),
+        StandardBusInterface(_, _, _, _))
+    )(json)
+  }
+}
+
+sealed trait PortMaps
+case class ArrayPortMaps(ports: Seq[String]) extends PortMaps
+case class FieldPortMaps(map: ListMap[String, String]) extends PortMaps
+
+object PortMaps {
+  def fromJSON(json: JValue): J.Result[PortMaps] = {
+    J.oneOf(
+      J.objMap((fieldName, portName) => J.string(portName).map(fieldName -> _))(_)
+        .map(pairs => FieldPortMaps(ListMap(pairs:_*))),
+      J.arrMap(J.string)(_).map(ArrayPortMaps(_))
+    )(json)
+  }
+}
+
+case class BusAbstractionType(viewRef: Option[String], portMaps: Option[PortMaps])
+
+object BusAbstractionType {
+  def fromJSON(json: JValue): J.Result[BusAbstractionType] = {
+    J.map2(
+      J.fieldOption("viewRef", J.string),
+      J.fieldOption("portMaps", PortMaps.fromJSON),
+      (viewRef: Option[String], portMapsOpt: Option[PortMaps]) =>
+        BusAbstractionType(viewRef, portMapsOpt)
+    )(json)
+  }
+}
+
+object BusInterface {
+  def fromJSON(json: JValue): J.Result[BusInterface] = {
+    J.map2(
+      J.field("busType", BusInterfaceType.fromJSON),
+      J.fieldOption("abstractionTypes", J.arrMap(BusAbstractionType.fromJSON)),
+      (busType: BusInterfaceType, abstractionTypesOpt: Option[Seq[BusAbstractionType]]) =>
+        BusInterface(busType, abstractionTypesOpt.getOrElse(Seq.empty))
+    )(json)
+  }
+}
+
+case class BusDefinition(busType: StandardBusInterface, description: Option[String])
+case class BusPortDefinition(
+  description: Option[String],
+  onMaster: BusWireDefinition,
+  onSlave: BusWireDefinition,
+  defaultValue: Option[BigInt],
+  isClock: Boolean,
+  requiresDriver: Boolean
+)
+trait BusPresence
+case object Optional extends BusPresence
+case object Required extends BusPresence
+case class BusWireDefinition(presence: BusPresence, width: BigInt, direction: Direction)
+
+object BusWireDefinition {
+  def fromJSON(json: JValue): J.Result[BusWireDefinition] = {
+    J.map3(
+      J.string {
+        case "optional" => J.pass(Optional)
+        case "required" => J.pass(Required)
+        case other => J.fail(s"'$other' is not a valid bus wire presence value")
+      },
+      J.fieldOption("width", J.integer)(_).map(_.getOrElse(BigInt(1))),
+      Direction.fromJSON,
+      BusWireDefinition(_, _, _)
+    )(json)
+  }
+}
+
+object BusPortDefinition {
+  case class WirePair(onMaster: BusWireDefinition, onSlave: BusWireDefinition)
+
+  def fromJSON(json: JValue): J.Result[BusPortDefinition] = {
+    J.map5(
+      J.fieldOption("description", J.string),
+      J.field("wire", J.map2(
+        J.field("onMaster", BusWireDefinition.fromJSON),
+        J.field("onSlave", BusWireDefinition.fromJSON),
+        WirePair(_, _)
+      )),
+      J.fieldOption("defaultValue", J.integer),
+      J.fieldOption("isClock", J.boolean)(_).map(_.getOrElse(false)),
+      J.fieldOption("requiresDriver", J.boolean)(_).map(_.getOrElse(false)),
+      (desc: Option[String], wire: WirePair, default: Option[BigInt], isClock: Boolean, requiresDriver: Boolean) =>
+        BusPortDefinition(
+          desc,
+          wire.onMaster,
+          wire.onSlave,
+          default,
+          isClock,
+          requiresDriver)
+    )(json)
   }
 }

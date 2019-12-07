@@ -45,8 +45,13 @@ package object decoders {
             s"${acc}\n${tab * indent}${helper(indent + 1, child)}"
           }
       }
-      s"/${helper(1, error)}"
+      s"error at /${helper(1, error)}"
     }
+  }
+
+  def get[T](result: Result[T]): T = result match {
+    case Right(value) => value
+    case Left(error) => throw new Exception(error.toString)
   }
 
   type Result[T] = Either[Error, T]
@@ -90,6 +95,52 @@ package object decoders {
         case Right(b) => fn2(value) match {
           case Left(e) => fail(e)
           case Right(c) => pass(combiner(a, b, c))
+        }
+      }
+    }
+  }
+
+  def map4[A, B, C, D, E](
+    fn0: Decoder[A],
+    fn1: Decoder[B],
+    fn2: Decoder[C],
+    fn3: Decoder[D],
+    combiner: (A, B, C, D) => E)(value: JValue): Result[E] = {
+    fn0(value) match {
+      case Left(e) => fail(e)
+      case Right(a) => fn1(value) match {
+        case Left(e) => fail(e)
+        case Right(b) => fn2(value) match {
+          case Left(e) => fail(e)
+          case Right(c) => fn3(value) match {
+            case Left(e) => fail(e)
+            case Right(d) => pass(combiner(a, b, c, d))
+          }
+        }
+      }
+    }
+  }
+
+  def map5[A, B, C, D, E, F](
+    fn0: Decoder[A],
+    fn1: Decoder[B],
+    fn2: Decoder[C],
+    fn3: Decoder[D],
+    fn4: Decoder[E],
+    combiner: (A, B, C, D, E) => F)(value: JValue): Result[F] = {
+    fn0(value) match {
+      case Left(e) => fail(e)
+      case Right(a) => fn1(value) match {
+        case Left(e) => fail(e)
+        case Right(b) => fn2(value) match {
+          case Left(e) => fail(e)
+          case Right(c) => fn3(value) match {
+            case Left(e) => fail(e)
+            case Right(d) => fn4(value) match {
+              case Left(e) => fail(e)
+              case Right(f) => pass(combiner(a, b, c, d, f))
+            }
+          }
         }
       }
     }
