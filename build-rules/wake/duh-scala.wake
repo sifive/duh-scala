@@ -8,13 +8,19 @@ def scalacOpts =
 
 global def duhScalaRoot = simplify "{here}/../../"
 
+global def jsonDecodersScalaModule =
+  makeScalaModuleFromJSON duhScalaRoot "json-decoders"
+  | setScalaModuleRootDir "{duhScalaRoot}/json-decoders"
+  | setScalaModuleSourceDirs ("src", Nil)
+  | setScalaModuleScalacOptions scalacOpts
+  | addMacrosParadiseCompilerPlugin
+
 global def duhScalaScalaModule =
   makeScalaModuleFromJSON duhScalaRoot "duh-scala"
   | setScalaModuleRootDir "{duhScalaRoot}/craft"
   | setScalaModuleSourceDirs ("src", Nil)
-  | setScalaModuleDeps (rocketchipScalaModule, Nil)
+  | setScalaModuleDeps (rocketchipScalaModule, jsonDecodersScalaModule, Nil)
   | setScalaModuleScalacOptions scalacOpts
-  | addMacrosParadiseCompilerPlugin
 
 global def duhExportScala paramsFile jsonFile =
   def jars = scalaModuleClasspath duhScalaScalaModule
@@ -31,6 +37,7 @@ global def duhExportScala paramsFile jsonFile =
     jsonFile,
     Nil
   def inputs = makeStatePath paramsFile, makeStatePath jsonFile, jars
+  def _ = map (_.getPathResult.format.println) inputs
   makePlan cmdline inputs
   | setPlanKeep False
   | runJob
