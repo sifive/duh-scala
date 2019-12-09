@@ -73,50 +73,36 @@ package object decoders {
     }
   }
 
-  object rmapNamed extends Dynamic {
-    def applyDynamicNamed(method: String)(rec: Any*): Any = macro MapMacros.rmapNamed
+  object mapNamed extends Dynamic {
+    def applyDynamicNamed[A, B](method: String)(args: (String, A => Any)*): Result[B] = macro MapMacros.mapNamed[A, B]
   }
 
   object jmapNamed extends Dynamic {
-    def applyDynamicNamed[T](method: String)(args: (String, JValue => Any)*): JValue => Result[T] = macro MapMacros.jmapNamed[T]
+    def applyDynamicNamed[T](method: String)(args: (String, JValue => Any)*): JValue => Result[T] = macro MapMacros.mapNamed[JValue, T]
   }
 
   object MapMacros
   class MapMacros(val c: whitebox.Context) {
     import c.universe._
 
-    def jmapNamed[T](method: Tree)(args: Tree*)(implicit tag: WeakTypeTag[T]): Tree = {
+    def mapNamed[A, B](method: Tree)(args: Tree*)(implicit aTag: WeakTypeTag[A], bTag: WeakTypeTag[B]): Tree = {
       val q"${methodString: String}" = method
       if (methodString != "apply")
         c.abort(c.enclosingPosition, s"missing method '$methodString'")
 
       if (args.length > 1) {
-        val jvalName = TermName(c.freshName("json"))
+        val mapValName = TermName(c.freshName("mapValue"))
         val appliedArgs = args.map {
-          case q"($name, $result)" => q"($name, $result($jvalName))"
+          case q"($name, $result)" => q"($name, $result($mapValName))"
         }
-        val fn = q"${tag.tpe.typeSymbol.companion}.apply"
+        val fn = q"${bTag.tpe.typeSymbol.companion}.apply"
         q"""
-        ($jvalName: org.json4s.JsonAST.JValue) => {
+        ($mapValName: ${aTag.tpe}) => {
           ${makeMatches(fn, appliedArgs)}
         }
         """
       } else {
         args.head
-      }
-    }
-
-    def rmapNamed(method: Tree)(rec: Tree*): Tree = {
-      val q"${methodString: String}" = method
-      if (methodString != "apply")
-        c.abort(c.enclosingPosition, s"missing method '$methodString'")
-
-      if (rec.length > 1) {
-        val q"($name, $fn)" = rec.last
-        val args = rec.dropRight(1)
-        makeMatches(fn, args)
-      } else {
-        rec.head
       }
     }
 
