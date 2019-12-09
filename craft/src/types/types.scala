@@ -19,7 +19,8 @@ object Component {
       name = J.field("name", J.string),
       ports = J.field("model",
         J.field("ports", J.oneOf(J.objMap(Port.fromJSONField), J.arrMap(Port.fromJSON)))),
-      pSchema = J.field("pSchema", ParameterSchema.fromJSON),
+      pSchema = J.field("model",
+        J.field("pSchema", ParameterSchema.fromJSON)),
       busInterfaces = J.field("busInterfaces", J.arrMap(BusInterface.fromJSON))
     )
 }
@@ -481,8 +482,8 @@ object BusPortDefinition {
       onSlave = J.field("wire",
         J.field("onSlave", BusWireDefinition.fromJSON)),
       defaultValue = J.fieldOption("defaultValue", J.integer),
-      isClock = J.fieldOption("isClock", J.boolean)(_: JValue).map(_.getOrElse(false)),
-      requiresDriver = J.fieldOption("requiresDriver", J.boolean)(_: JValue).map(_.getOrElse(false)),
+      isClock = J.fieldOption("isClock", J.boolean)(_).map(_.getOrElse(false)),
+      requiresDriver = J.fieldOption("requiresDriver", J.boolean)(_).map(_.getOrElse(false)),
     )(json)
   }
 }
