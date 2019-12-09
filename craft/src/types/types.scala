@@ -14,7 +14,7 @@ case class Component(
   busInterfaces: Seq[BusInterface]) extends DUHType
 
 object Component {
-  val fromJSON: JValue => J.Result[Component] =
+  val fromJSON: J.Decoder[Component] =
     J.jmapNamed[Component](
       name = J.field("name", J.string),
       ports = J.field("model",
@@ -35,7 +35,7 @@ case object Output extends Direction
 case object Inout extends Direction
 
 object Direction {
-  val fromJSON: JValue => J.Result[Direction] = J.string(fromString(_))
+  val fromJSON: J.Decoder[Direction] = J.string(fromString(_))
 
   val fromString: String => J.Result[Direction] = {
     case "in" => J.pass(Input)
@@ -71,7 +71,7 @@ object Expression {
     }
   }
 
-  val fromJSON: JValue => J.Result[Expression] =
+  val fromJSON: J.Decoder[Expression] =
     J.oneOf(J.string(fromString), J.integer(fromInteger))
 
   def isInput(expr: Expression): Boolean = expr match {
@@ -104,7 +104,7 @@ object Wire {
     })
   }
 
-  val fromJSON: JValue => J.Result[Wire] = json =>
+  val fromJSON: J.Decoder[Wire] = json =>
     J.oneOf(
       Expression.fromJSON(_).flatMap(fromExpression),
       J.jmapNamed[Wire](
@@ -121,7 +121,7 @@ object Port {
     Wire.fromJSON(json).map(w => Port(name, w))
   }
 
-  val fromJSON: JValue => J.Result[Port] =
+  val fromJSON: J.Decoder[Port] =
     J.jmapNamed[Port](
       name = J.field("name", J.string),
       wire = Wire.fromJSON,
@@ -161,7 +161,7 @@ object IntegerConstraint {
     }
   }
 
-  val collectFromJSON: JValue => J.Result[Seq[IntegerConstraint]] = json => {
+  val collectFromJSON: J.Decoder[Seq[IntegerConstraint]] = json => {
     J.hasType("integer",
       J.objMap(fromJSON))(json).map { constraints => constraints.flatten
     }
@@ -197,7 +197,7 @@ object DoubleConstraint {
     }
   }
 
-  val collectFromJSON: JValue => J.Result[Seq[DoubleConstraint]] = json => {
+  val collectFromJSON: J.Decoder[Seq[DoubleConstraint]] = json => {
     J.hasType("number",
       J.objMap(fromJSON))(json).map { constraints => constraints.flatten
     }
@@ -231,7 +231,7 @@ object StringConstraint {
     }
   }
 
-  val collectFromJSON: JValue => J.Result[Seq[StringConstraint]] = json => {
+  val collectFromJSON: J.Decoder[Seq[StringConstraint]] = json => {
     J.hasType("string",
       J.objMap(fromJSON))(json).map { constraints => constraints.flatten
     }
@@ -247,7 +247,7 @@ sealed trait ParameterDefinition {
 
   protected def fromJSONImp(json: JValue): J.Result[ParamType]
   
-  final val fromJSON: JValue => J.Result[ParamType] = json => {
+  final val fromJSON: J.Decoder[ParamType] = json => {
     fromJSONImp(json).flatMap {
       case value if constraints.forall(_.satisfies(value)) => J.pass(value)
       case value => J.fail(s"$value does not satisfy constraints")
@@ -363,7 +363,7 @@ case class ParameterSchema(definitions: Seq[ParameterDefinition]) {
 }
 
 object ParameterSchema {
-  val fromJSON: JValue => J.Result[ParameterSchema] = json => {
+  val fromJSON: J.Decoder[ParameterSchema] = json => {
     J.hasType("object",
       J.field("properties", J.objMap(ParameterDefinition.fromJSONField)))(json)
         .map(ParameterSchema(_))
@@ -379,7 +379,7 @@ case class StandardBusInterface(
 case class NonStandardBusInterface(name: String) extends BusInterfaceType
 
 object StandardBusInterface {
-  val fromJSON: JValue => J.Result[StandardBusInterface] =
+  val fromJSON: J.Decoder[StandardBusInterface] =
     J.jmapNamed[StandardBusInterface](
       vendor = J.field("vendor", J.string),
       library = J.field("library", J.string),
@@ -390,7 +390,7 @@ object StandardBusInterface {
 
 
 object BusInterfaceType {
-  val fromJSON: JValue => J.Result[BusInterfaceType] = {
+  val fromJSON: J.Decoder[BusInterfaceType] = {
     J.oneOf(
       J.string(n => J.pass(NonStandardBusInterface(n))),
       StandardBusInterface.fromJSON
@@ -403,7 +403,7 @@ case class ArrayPortMaps(ports: Seq[String]) extends PortMaps
 case class FieldPortMaps(map: ListMap[String, String]) extends PortMaps
 
 object PortMaps {
-  val fromJSON: JValue => J.Result[PortMaps] = {
+  val fromJSON: J.Decoder[PortMaps] = {
     J.oneOf(
       J.objMap((fieldName, portName) => J.string(portName).map(fieldName -> _))(_)
         .map(pairs => FieldPortMaps(ListMap(pairs:_*))),
@@ -415,7 +415,7 @@ object PortMaps {
 case class BusAbstractionType(viewRef: Option[String], portMaps: Option[PortMaps])
 
 object BusAbstractionType {
-  val fromJSON: JValue => J.Result[BusAbstractionType] = {
+  val fromJSON: J.Decoder[BusAbstractionType] = {
     J.jmapNamed[BusAbstractionType](
       viewRef = J.fieldOption("viewRef", J.string),
       portMaps = J.fieldOption("portMaps", PortMaps.fromJSON),
@@ -429,7 +429,7 @@ case class BusInterface(
 )
 
 object BusInterface {
-  val fromJSON: JValue => J.Result[BusInterface] = {
+  val fromJSON: J.Decoder[BusInterface] = {
     J.jmapNamed[BusInterface](
       busType = J.field("busType", BusInterfaceType.fromJSON),
       abstractionTypes = J.fieldOption("abstractionTypes", J.arrMap(BusAbstractionType.fromJSON))(_)
@@ -454,7 +454,7 @@ case object Required extends BusPresence
 case class BusWireDefinition(presence: BusPresence, width: Expression, direction: Direction)
 
 object BusWireDefinition {
-  val fromJSON: JValue => J.Result[BusWireDefinition] = {
+  val fromJSON: J.Decoder[BusWireDefinition] = {
     J.jmapNamed[BusWireDefinition](
       presence = J.field("presence", J.string {
         case "optional" => J.pass(Optional)
@@ -493,7 +493,7 @@ case class BusDefinition(
   ports: Seq[BusPortDefinition])
 
 object BusDefinition {
-  val fromJSON: JValue => J.Result[BusDefinition] = {
+  val fromJSON: J.Decoder[BusDefinition] = {
     J.jmapNamed[BusDefinition](
       ports = J.field("ports", J.objMap(BusPortDefinition.fromJSON)),
       description = J.fieldOption("description", J.string),
