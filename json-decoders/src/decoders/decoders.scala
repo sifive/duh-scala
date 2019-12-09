@@ -78,29 +78,31 @@ package object decoders {
   }
 
   object jmapNamed extends Dynamic {
-    def applyDynamicNamed(method: String)(rec: (String, Any)*): JValue => Any = macro MapMacros.jmapNamed
+    def applyDynamicNamed[T](method: String)(args: (String, JValue => Any)*): JValue => Result[T] = macro MapMacros.jmapNamed[T]
   }
 
   object MapMacros
   class MapMacros(val c: whitebox.Context) {
     import c.universe._
 
-    def jmapNamed(method: Tree)(rec: Tree*): Tree = {
+    def jmapNamed[T](method: Tree)(args: Tree*)(implicit tag: WeakTypeTag[T]): Tree = {
       val q"${methodString: String}" = method
       if (methodString != "apply")
         c.abort(c.enclosingPosition, s"missing method '$methodString'")
 
-      if (rec.length > 1) {
-        val q"($name, $fn)" = rec.last
+      if (args.length > 1) {
         val jvalName = TermName(c.freshName("json"))
-        val args = rec.dropRight(1).map {
+        val appliedArgs = args.map {
           case q"($name, $result)" => q"($name, $result($jvalName))"
         }
-        q"""($jvalName: org.json4s.JsonAST.JValue) => {
-          ${makeMatches(fn, args)}
-        }"""
+        val fn = q"${tag.tpe.typeSymbol.companion}.apply"
+        q"""
+        ($jvalName: org.json4s.JsonAST.JValue) => {
+          ${makeMatches(fn, appliedArgs)}
+        }
+        """
       } else {
-        rec.head
+        args.head
       }
     }
 
