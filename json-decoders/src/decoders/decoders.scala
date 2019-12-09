@@ -64,8 +64,8 @@ package object decoders {
   def fail(cause: String): Result[Nothing] = Left(Error.Failure(cause))
   def pass[T](value: T): Result[T] = Right(value)
 
-  def oneOf[T](fns: Decoder[T]*)(value: JValue): Result[T] = {
-    val (passes, fails) = fns.map(_.apply(value)).partition(_.isRight)
+  def oneOf[T](fns: Decoder[T]*): Decoder[T] = json => {
+    val (passes, fails) = fns.map(_.apply(json)).partition(_.isRight)
     passes match {
       case Seq(head) => head
       case Seq() => fail(Error.Multiple(fails.flatMap(_.swap.toSeq)))
@@ -78,7 +78,7 @@ package object decoders {
   }
 
   object jmapNamed extends Dynamic {
-    def applyDynamicNamed[T](method: String)(args: (String, JValue => Any)*): JValue => Result[T] = macro MapMacros.mapNamed[JValue, T]
+    def applyDynamicNamed[T](method: String)(args: (String, JValue => Any)*): Decoder[T] = macro MapMacros.mapNamed[JValue, T]
   }
 
   object MapMacros
@@ -133,37 +133,7 @@ package object decoders {
     }
   }
 
-  def map2[A, B, C](
-    fn0: Decoder[A],
-    fn1: Decoder[B],
-    combiner: (A, B) => C)(value: JValue): Result[C] = {
-    fn0(value) match {
-      case Left(e) => fail(e)
-      case Right(a) => fn1(value) match {
-        case Left(e) => fail(e)
-        case Right(b) => pass(combiner(a, b))
-      }
-    }
-  }
-
-  def map3[A, B, C, D](
-    fn0: Decoder[A],
-    fn1: Decoder[B],
-    fn2: Decoder[C],
-    combiner: (A, B, C) => D)(value: JValue): Result[D] = {
-    fn0(value) match {
-      case Left(e) => fail(e)
-      case Right(a) => fn1(value) match {
-        case Left(e) => fail(e)
-        case Right(b) => fn2(value) match {
-          case Left(e) => fail(e)
-          case Right(c) => pass(combiner(a, b, c))
-        }
-      }
-    }
-  }
-
-  def arrMap[T](fn: Decoder[T]): JValue => Result[Seq[T]] = {
+  def arrMap[T](fn: Decoder[T]): Decoder[Seq[T]] = {
     case JArray(elements) =>
       val (passes: Seq[Result[T]], fails: Seq[Result[T]]) =
         elements.zipWithIndex.map({ case (value, index) =>
@@ -178,7 +148,7 @@ package object decoders {
     case _ => fail(Error.Failure(s"not a JObject"))
   }
 
-  def objMap[T](fn: (String, JValue) => Result[T]): JValue => Result[Seq[T]] =
+  def objMap[T](fn: (String, JValue) => Result[T]): Decoder[Seq[T]] =
     (value: JValue) => value match {
       case JObject(fields) =>
         val (passes: Seq[Result[T]], fails: Seq[Result[T]]) = fields.map({ case (field, value) =>
@@ -193,7 +163,7 @@ package object decoders {
       case _ => fail(Error.Failure(s"not a JObject"))
     }
 
-  def field[T](name: String, nextDecoder: Decoder[T]): JValue => Result[T] =
+  def field[T](name: String, nextDecoder: Decoder[T]): Decoder[T] =
     (value: JValue) => value match {
       case JObject(fields) => fields.filter(_._1 == name) match {
         case List((_, selected)) =>
@@ -204,7 +174,7 @@ package object decoders {
       case _ => fail(Error.Failure(s"not a JObject"))
     }
 
-  def fieldOption[T](name: String, someDecoder: Decoder[T]): JValue => Result[Option[T]] = 
+  def fieldOption[T](name: String, someDecoder: Decoder[T]): Decoder[Option[T]] = 
     (value: JValue) => value match {
       case JObject(fields) => fields.find(_._1 == name) match {
         case Some((_, selected)) =>
@@ -214,7 +184,7 @@ package object decoders {
       case _ => fail(Error.Failure(s"not a JObject"))
     }
 
-  def index[T](idx: Int, nextDecoder: Decoder[T]): JValue => Result[T] =
+  def index[T](idx: Int, nextDecoder: Decoder[T]): Decoder[T] =
     (value: JValue) => value match {
       case JArray(elements) => elements.lift(idx) match {
         case Some(selected) =>
@@ -224,41 +194,41 @@ package object decoders {
       case _ => fail(s"not a JArray")
     }
 
-  def hasType[T](required: String, nextDecoder: Decoder[T]): JValue => Result[T] =
+  def hasType[T](required: String, nextDecoder: Decoder[T]): Decoder[T] =
     json => field("type", string((given: String) => given match {
       case given if given == required => nextDecoder(json)
       case _ => fail(s"type field must be '${required}'")
     }))(json)
 
 
-  def string[T](fn: String => Result[T]): JValue => Result[T] = {
+  def string[T](fn: String => Result[T]): Decoder[T] = {
     case JString(str) => fn(str)
     case _ => fail("not a JString")
   }
 
-  val string: JValue => Result[String] = string(pass(_: String))
+  val string: Decoder[String] = string(pass(_: String))
 
 
-  def integer[T](fn: BigInt => Result[T]): JValue => Result[T] = {
+  def integer[T](fn: BigInt => Result[T]): Decoder[T] = {
     case JInt(num) => fn(num)
     case _ => fail("not a JInt")
   }
 
-  val integer: JValue => Result[BigInt] = integer(pass(_: BigInt))
+  val integer: Decoder[BigInt] = integer(pass(_: BigInt))
 
 
-  def double[T](fn: Double => Result[T]): JValue => Result[T] = {
+  def double[T](fn: Double => Result[T]): Decoder[T] = {
     case JDouble(num) => fn(num)
     case _ => fail("not a JDouble")
   }
 
-  val double: JValue => Result[Double] = double(pass(_: Double))
+  val double: Decoder[Double] = double(pass(_: Double))
 
 
-  def boolean[T](fn: Boolean => Result[T]): JValue => Result[T] = (value: JValue) => value match {
+  def boolean[T](fn: Boolean => Result[T]): Decoder[T] = (value: JValue) => value match {
     case JBool(bool) => fn(bool)
     case _ => fail("not a JBool")
   }
 
-  val boolean: JValue => Result[Boolean] = boolean(pass(_: Boolean))
+  val boolean: Decoder[Boolean] = boolean(pass(_: Boolean))
 }

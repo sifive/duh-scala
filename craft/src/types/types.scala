@@ -300,10 +300,11 @@ case class DoubleParameter(
 
 object DoubleParameter {
   val fromJSONField: (String, JValue) => J.Result[DoubleParameter] = (name, json) => {
-    J.map2(
-      J.fieldOption("default", J.double),
-      DoubleConstraint.collectFromJSON,
-      DoubleParameter(name, _, _)
+    val namePass = (_: JValue) => J.pass(name)
+    J.jmapNamed[DoubleParameter](
+      name = namePass,
+      default = J.fieldOption("default", J.double),
+      constraints = DoubleConstraint.collectFromJSON,
     )(json)
   }
 }
@@ -318,10 +319,11 @@ case class StringParameter(
 
 object StringParameter {
   val fromJSONField: (String, JValue) => J.Result[StringParameter] = (name, json) => {
-    J.map2(
-      J.fieldOption("default", J.string),
-      StringConstraint.collectFromJSON,
-      StringParameter(name, _, _)
+    val namePass = (_: JValue) => J.pass(name)
+    J.jmapNamed[StringParameter](
+      name = namePass,
+      default = J.fieldOption("default", J.string),
+      constraints = StringConstraint.collectFromJSON,
     )(json)
   }
 }
@@ -367,11 +369,6 @@ object ParameterSchema {
         .map(ParameterSchema(_))
   }
 }
-
-case class BusInterface(
-  busType: BusInterfaceType,
-  abstractionTypes: Seq[BusAbstractionType]
-)
 
 trait BusInterfaceType
 case class StandardBusInterface(
@@ -426,13 +423,17 @@ object BusAbstractionType {
   }
 }
 
+case class BusInterface(
+  busType: BusInterfaceType,
+  abstractionTypes: Seq[BusAbstractionType]
+)
+
 object BusInterface {
   val fromJSON: JValue => J.Result[BusInterface] = {
-    J.map2(
-      J.field("busType", BusInterfaceType.fromJSON),
-      J.fieldOption("abstractionTypes", J.arrMap(BusAbstractionType.fromJSON)),
-      (busType: BusInterfaceType, abstractionTypesOpt: Option[Seq[BusAbstractionType]]) =>
-        BusInterface(busType, abstractionTypesOpt.getOrElse(Seq.empty))
+    J.jmapNamed[BusInterface](
+      busType = J.field("busType", BusInterfaceType.fromJSON),
+      abstractionTypes = J.fieldOption("abstractionTypes", J.arrMap(BusAbstractionType.fromJSON))(_)
+        .map(_.getOrElse(Seq.empty)),
     )
   }
 }
