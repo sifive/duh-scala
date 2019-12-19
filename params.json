@@ -1,5 +1,7 @@
 {
-  "dataWidth": 10,
+  "dataWidth": 32,
+  "addrWidth": 6,
+  "baseAddress": 1024,
   "asdf": 24,
   "sdlkfj": 0
 }

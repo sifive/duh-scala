@@ -5,30 +5,30 @@ import org.json4s.JsonAST._
 import scala.collection.immutable.ListMap
 import scala.util.matching.Regex
 
-sealed trait DUHType
-
-case class Component(
-  name: String,
-  ports: Seq[Port],
-  pSchema: ParameterSchema,
-  busInterfaces: Seq[BusInterface]) extends DUHType
+sealed trait Component {
+  def name: String
+  def ports: Seq[Port]
+  def pSchema: ParameterSchema
+  def busInterfaces: Seq[BusInterface]
+}
 
 object Component {
+
+  private[types] case class ComponentImp(
+    name: String,
+    ports: Seq[Port],
+    pSchema: ParameterSchema,
+    busInterfaces: Seq[BusInterface]) extends Component
+
   val fromJSON: J.Decoder[Component] =
-    J.jmapNamed[Component](
+    J.jMapNamed[ComponentImp](
       name = J.field("name", J.string),
       ports = J.field("model",
         J.field("ports", J.oneOf(J.objMap(Port.fromJSONField), J.arrMap(Port.fromJSON)))),
-      pSchema = J.field("model",
-        J.field("pSchema", ParameterSchema.fromJSON)),
+      pSchema = J.field("pSchema", ParameterSchema.fromJSON),
       busInterfaces = J.field("busInterfaces", J.arrMap(BusInterface.fromJSON))
     )
 }
-
-sealed trait InterfaceMode extends DUHType
-case object Master extends InterfaceMode
-case object Slave extends InterfaceMode
-case object Monitor extends InterfaceMode
 
 sealed trait Direction
 case object Input extends Direction
@@ -51,9 +51,11 @@ case class Parameter(name: String) extends Expression
 case class Negate(expr: Expression) extends Expression
 
 sealed trait Literal extends Expression
+
 case class IntegerLiteral(value: BigInt) extends Literal
 
 object Expression {
+
   val fromInteger: BigInt => J.Result[Expression] = integer => {
     J.pass(IntegerLiteral(integer))
   }
@@ -64,7 +66,7 @@ object Expression {
     } catch {
       case e: java.lang.NumberFormatException =>
         string.slice(0, 1) match {
-          case "" => J.fail("empty string")
+          case "" => J.fail("empty string is not a valid expression")
           case "-" => J.pass(Negate(Parameter(string.drop(1))))
           case "+" => J.pass(Parameter(string.drop(1)))
           case _ => J.pass(Parameter(string))
@@ -91,24 +93,31 @@ object Expression {
     }
 }
 
-case class Wire(
-  width: Expression,
-  direction: Direction,
-  analogDirection: Option[Direction] = None)
+sealed trait Wire {
+  def width: Expression
+  def direction: Direction
+  def analogDirection: Option[Direction]
+}
 
 object Wire {
+
+  private[types] case class WireImp(
+    width: Expression,
+    direction: Direction,
+    analogDirection: Option[Direction]) extends Wire
+
   val fromExpression: Expression => J.Result[Wire] = expr => {
     J.pass(if (Expression.isInput(expr)) {
-      Wire(expr, Input)
+      WireImp(expr, Input, None)
     } else {
-      Wire(Negate(expr), Output)
+      WireImp(Negate(expr), Output, None)
     })
   }
 
   val fromJSON: J.Decoder[Wire] = json =>
     J.oneOf(
       Expression.fromJSON(_).flatMap(fromExpression),
-      J.jmapNamed[Wire](
+      J.jMapNamed[WireImp](
         width = J.field("width", Expression.fromJSON),
         direction = J.field("direction", J.string(Direction.fromString)),
         analogDirection = J.fieldOption("analog", J.string(Direction.fromString))
@@ -123,7 +132,7 @@ object Port {
   }
 
   val fromJSON: J.Decoder[Port] =
-    J.jmapNamed[Port](
+    J.jMapNamed[Port](
       name = J.field("name", J.string),
       wire = Wire.fromJSON,
     )
@@ -249,9 +258,16 @@ sealed trait ParameterDefinition {
   protected def fromJSONImp(json: JValue): J.Result[ParamType]
   
   final val fromJSON: J.Decoder[ParamType] = json => {
-    fromJSONImp(json).flatMap {
+    val checkConstraints: ParamType => J.Result[ParamType] = {
       case value if constraints.forall(_.satisfies(value)) => J.pass(value)
       case value => J.fail(s"$value does not satisfy constraints")
+    }
+    J.fieldOption(name, fromJSONImp)(json).flatMap {
+      case Some(value) => checkConstraints(value)
+      case None => default match {
+        case Some(value) => checkConstraints(value)
+        case None => J.fail(s"no parameter named '$name' defined in schema")
+      }
     }
   }
 }
@@ -271,19 +287,13 @@ case class IntegerParameter(
   default: Option[BigInt],
   constraints: Seq[IntegerConstraint]) extends ParameterDefinition {
   type ParamType = BigInt
-  def fromJSONImp(json: JValue) = J.fieldOption(name, J.integer)(json).flatMap {
-    case Some(value) => J.pass(value)
-    case None => default match {
-      case Some(value) => J.pass(value)
-      case None => J.fail(s"no parameter named '$name'")
-    }
-  }
+  def fromJSONImp(json: JValue) = J.integer(json)
 }
 
 object IntegerParameter {
   val fromJSONField: (String, JValue) => J.Result[IntegerParameter] = (name, json) => {
     val namePass = (_: JValue) => J.pass(name)
-    J.jmapNamed[IntegerParameter](
+    J.jMapNamed[IntegerParameter](
       default = J.fieldOption("default", J.integer),
       constraints = IntegerConstraint.collectFromJSON,
       name = namePass,
@@ -302,7 +312,7 @@ case class DoubleParameter(
 object DoubleParameter {
   val fromJSONField: (String, JValue) => J.Result[DoubleParameter] = (name, json) => {
     val namePass = (_: JValue) => J.pass(name)
-    J.jmapNamed[DoubleParameter](
+    J.jMapNamed[DoubleParameter](
       name = namePass,
       default = J.fieldOption("default", J.double),
       constraints = DoubleConstraint.collectFromJSON,
@@ -321,7 +331,7 @@ case class StringParameter(
 object StringParameter {
   val fromJSONField: (String, JValue) => J.Result[StringParameter] = (name, json) => {
     val namePass = (_: JValue) => J.pass(name)
-    J.jmapNamed[StringParameter](
+    J.jMapNamed[StringParameter](
       name = namePass,
       default = J.fieldOption("default", J.string),
       constraints = StringConstraint.collectFromJSON,
@@ -330,7 +340,7 @@ object StringParameter {
 }
 
 case class ParameterSchema(definitions: Seq[ParameterDefinition]) {
-  private val nameMap = definitions.map(p => p.name -> p).toMap.lift
+  private[types] val nameMap = definitions.map(p => p.name -> p).toMap.lift
 
   def getValue(name: String)(json: JValue): J.Result[Literal] = {
     J.oneOf(
@@ -371,7 +381,7 @@ object ParameterSchema {
   }
 }
 
-trait BusInterfaceType
+sealed trait BusInterfaceType
 case class StandardBusInterface(
   vendor: String,
   library: String,
@@ -381,7 +391,7 @@ case class NonStandardBusInterface(name: String) extends BusInterfaceType
 
 object StandardBusInterface {
   val fromJSON: J.Decoder[StandardBusInterface] =
-    J.jmapNamed[StandardBusInterface](
+    J.jMapNamed[StandardBusInterface](
       vendor = J.field("vendor", J.string),
       library = J.field("library", J.string),
       name = J.field("name", J.string),
@@ -413,50 +423,101 @@ object PortMaps {
   }
 }
 
-case class BusAbstractionType(viewRef: Option[String], portMaps: Option[PortMaps])
+sealed trait BusProperty {
+  def name: String
+  def value: Expression
+}
 
-object BusAbstractionType {
-  val fromJSON: J.Decoder[BusAbstractionType] = {
-    J.jmapNamed[BusAbstractionType](
-      viewRef = J.fieldOption("viewRef", J.string),
-      portMaps = J.fieldOption("portMaps", PortMaps.fromJSON),
+object BusProperty {
+  private[types] case class BusPropertyImp(
+    name: String,
+    value: Expression
+  ) extends BusProperty
+
+  val fromJSONField: (String, JValue) => J.Result[BusProperty] = (name, json) => {
+    val namePass = (_: JValue) => J.pass(name)
+    J.jMapNamed[BusPropertyImp](
+      name = namePass,
+      value = Expression.fromJSON,
+    )(json)
+  }
+}
+
+sealed trait BusRTLView {
+  def portMaps: PortMaps
+  def properties: JValue
+}
+
+object BusRTLView {
+  private[types] case class BusRTLViewImp(
+    portMaps: PortMaps,
+    properties: JValue) extends BusRTLView
+
+  val fromJSON: J.Decoder[BusRTLView] = {
+    J.jMapNamed[BusRTLViewImp](
+      portMaps = J.field("portMaps", PortMaps.fromJSON),
+      properties = J.fieldOption("props", J.pass)(_)
+        .map(_.getOrElse(JObject(List.empty))),
     )
   }
 }
 
-case class BusInterface(
-  busType: BusInterfaceType,
-  abstractionTypes: Seq[BusAbstractionType]
-)
+
+sealed trait InterfaceMode
+case object Master extends InterfaceMode
+case object Slave extends InterfaceMode
+case object Monitor extends InterfaceMode
+
+
+sealed trait BusInterface {
+  def name: String
+  def busType: BusInterfaceType
+  def mode: InterfaceMode
+  def rtlView: BusRTLView
+}
 
 object BusInterface {
+  private[types] case class BusInterfaceImp(
+    name: String,
+    busType: BusInterfaceType,
+    mode: InterfaceMode,
+    rtlView: BusRTLView
+  ) extends BusInterface
+
   val fromJSON: J.Decoder[BusInterface] = {
-    J.jmapNamed[BusInterface](
+    J.jMapNamed[BusInterfaceImp](
       busType = J.field("busType", BusInterfaceType.fromJSON),
-      abstractionTypes = J.fieldOption("abstractionTypes", J.arrMap(BusAbstractionType.fromJSON))(_)
-        .map(_.getOrElse(Seq.empty)),
+      name = J.field("name", J.string),
+      mode = J.field("interfaceMode", J.string {
+        case "master" => J.pass(Master)
+        case "slave" => J.pass(Slave)
+        case other => J.fail(s"$other is not a valid bus interface mode")
+      }),
+      rtlView = J.field("abstractionTypes", J.arrFind(
+        J.field("viewRef", J.string)(_).map(_ == "RTLview").getOrElse(false),
+        BusRTLView.fromJSON))
     )
   }
 }
 
-case class BusPortDefinition(
-  name: String,
-  description: Option[String],
-  onMaster: BusWireDefinition,
-  onSlave: BusWireDefinition,
-  defaultValue: Option[BigInt],
-  isClock: Boolean,
-  requiresDriver: Boolean
-)
-
-trait BusPresence
+sealed trait BusPresence
 case object Optional extends BusPresence
 case object Required extends BusPresence
-case class BusWireDefinition(presence: BusPresence, width: Expression, direction: Direction)
+
+sealed trait BusWireDefinition {
+  def presence: BusPresence
+  def width: Expression
+  def direction: Direction
+}
 
 object BusWireDefinition {
+  private[types] case class BusWireDefinitionImp(
+    presence: BusPresence,
+    width: Expression,
+    direction: Direction) extends BusWireDefinition
+
   val fromJSON: J.Decoder[BusWireDefinition] = {
-    J.jmapNamed[BusWireDefinition](
+    J.jMapNamed[BusWireDefinitionImp](
       presence = J.field("presence", J.string {
         case "optional" => J.pass(Optional)
         case "required" => J.pass(Required)
@@ -469,12 +530,29 @@ object BusWireDefinition {
   }
 }
 
+sealed trait BusPortDefinition {
+  def name: String
+  def description: Option[String]
+  def onMaster: BusWireDefinition
+  def onSlave: BusWireDefinition
+  def defaultValue: Option[BigInt]
+  def isClock: Boolean
+  def requiresDriver: Boolean
+}
+
 object BusPortDefinition {
-  case class WirePair(onMaster: BusWireDefinition, onSlave: BusWireDefinition)
+  private[types] case class BusPortDefinitionImp(
+    name: String,
+    description: Option[String],
+    onMaster: BusWireDefinition,
+    onSlave: BusWireDefinition,
+    defaultValue: Option[BigInt],
+    isClock: Boolean,
+    requiresDriver: Boolean) extends BusPortDefinition
 
   val fromJSON: (String, JValue) => J.Result[BusPortDefinition] = (fieldName, json) => {
     val namePass = (_: JValue) => J.pass(fieldName)
-    J.jmapNamed[BusPortDefinition](
+    J.jMapNamed[BusPortDefinitionImp](
       name = namePass,
       description = J.fieldOption("description", J.string),
       onMaster = J.field("wire",
@@ -488,17 +566,27 @@ object BusPortDefinition {
   }
 }
 
-case class BusDefinition(
-  busType: StandardBusInterface,
-  description: Option[String],
-  ports: Seq[BusPortDefinition])
+sealed trait BusDefinition {
+  def busType: StandardBusInterface
+  def description: Option[String]
+  def ports: Seq[BusPortDefinition]
+  def propertySchema: ParameterSchema
+}
 
 object BusDefinition {
+  private[types] case class BusDefinitionImp(
+    busType: StandardBusInterface,
+    description: Option[String],
+    ports: Seq[BusPortDefinition],
+    propertySchema: ParameterSchema) extends BusDefinition
+
   val fromJSON: J.Decoder[BusDefinition] = {
-    J.jmapNamed[BusDefinition](
+    J.jMapNamed[BusDefinitionImp](
       ports = J.field("ports", J.objMap(BusPortDefinition.fromJSON)),
       description = J.fieldOption("description", J.string),
       busType = StandardBusInterface.fromJSON(_),
+      propertySchema = J.fieldOption("properties", ParameterSchema.fromJSON)(_)
+        .map(_.getOrElse(ParameterSchema(Seq.empty))),
     )
   }
 }

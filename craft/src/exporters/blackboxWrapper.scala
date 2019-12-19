@@ -62,4 +62,30 @@ package object exporters {
       }
     }
   }
+/*
+  def nodes(params: JValue, comp: DUH.Component, imps: List[BusImplementation]): Any = {
+    val impMap = imps.map(imp => imp.busDefinition.busType -> imp).toMap
+    if (impMap.size != imps.size) {
+      J.fail("multiple implementations for the same bus")
+    } else {
+      val results =
+        comp.busInterfaces.map { busInterface =>
+          busInterface.busType match {
+            case busType: DUH.StandardBusInterface =>
+              impMap.get(busType).map { busImp =>
+                val errors = Seq.empty
+                val warnings = Seq.empty
+                busInterface.mode match {
+                  case DUH.Master => Unit
+                  case DUH.Slave => Unit
+                }
+              }
+            case busType: DUH.NonStandardBusInterface =>
+              Unit
+              //BundleBridgeSource(() => blackbox.portInterface.cloneType)
+          }
+        }
+      results
+    }
+  }*/
 }
