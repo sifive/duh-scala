@@ -93,10 +93,17 @@ const main = argv => {
   const cwd = process.cwd();
   const folderName = path.basename(cwd);
   const fileName = argv._[0] || folderName + '.json5';
-  flow(Object.assign({filename: fileName}, argv)).catch(err => {
-    console.log(err);
-  });
+  flow(Object.assign({filename: fileName}, argv))
+    .catch(err => {
+      // console.log(err);
+      throw err;
+    });
 };
 
+process.on('unhandledRejection', err => {
+  throw err;
+});
+
 main(argv);
+
 /* eslint no-console: 0 */
