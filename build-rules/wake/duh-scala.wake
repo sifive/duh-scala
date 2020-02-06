@@ -22,7 +22,13 @@ global def duhScalaScalaModule =
   | setScalaModuleDeps (rocketchipScalaModule, jsonDecodersScalaModule, Nil)
   | setScalaModuleScalacOptions scalacOpts
 
-global def duhExportScala paramsFile jsonFile =
+global def asdf Unit =
+  duhExportScala
+  "{duhScalaRoot}/params.json"
+  "{duhScalaRoot}/example.json"
+  (source "{duhScalaRoot}/example-bus-spec.json", Nil)
+
+global def duhExportScala paramsFile jsonFile visible =
   def jars = scalaModuleClasspath duhScalaScalaModule
   def classpath =
     jars
@@ -36,7 +42,7 @@ global def duhExportScala paramsFile jsonFile =
     paramsFile,
     jsonFile,
     Nil
-  def inputs = makeStatePath paramsFile, makeStatePath jsonFile, jars
+  def inputs = makeStatePath paramsFile, makeStatePath jsonFile, jars ++ visible
   def _ = map (_.getPathResult.format.println) inputs
   makePlan cmdline inputs
   | setPlanKeep False

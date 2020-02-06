@@ -1,12 +1,22 @@
 package duh.scala.views
 
+import chisel3.{Data, Record}
+
+import scala.collection.immutable.ListMap
 import duh.scala.{types => DUH}
 import org.json4s.JsonAST._
 import scala.language.dynamics
 import duh.scala.{decoders => J}
-import freechips.rocketchip.diplomacy.{BundleBridgeSource, TransferSizes, AddressSet, Resource}
-import freechips.rocketchip.amba.axi4.{AXI4SlaveNode, AXI4MasterNode, AXI4SlavePortParameters, AXI4SlaveParameters}
 
+sealed trait LazyPortView {
+  def name: String
+  def width: Int
+  def direction: DUH.Direction
+}
+
+sealed trait ChiselPortView extends LazyPortView {
+  def data: Data
+}
 
 sealed trait ParameterDecoder[T] {
   private[views] val decoder: J.Decoder[T]
@@ -126,55 +136,93 @@ object BusPropertyBag {
   }
 }
 
-
-sealed trait RequiredPortBag extends Dynamic {
-  def selectDynamic(name: String): DUH.Port
+final class SelectBag[T] private(imp: String => T) extends Dynamic {
+  def selectDynamic(name: String): T = imp(name)
 }
 
-sealed trait OptionalPortBag extends Dynamic {
-  def selectDynamic(name: String): Option[DUH.Port]
+object SelectBag {
+  def apply[T](imp: String => T): SelectBag[T] = new SelectBag(imp)
 }
 
-sealed trait PortBag {
-  def required: RequiredPortBag
-  def optional: OptionalPortBag
+final class LazyPortViewBag private[views](
+  requiredImp: String => LazyPortView,
+  optionalImp: String => Option[LazyPortView]) {
+  val required: SelectBag[LazyPortView] = SelectBag(requiredImp)
+  val optional: SelectBag[Option[LazyPortView]] = SelectBag(optionalImp)
+}
+
+final class ChiselPortViewBag private[views](
+  requiredImp: String => ChiselPortView,
+  optionalImp: String => Option[ChiselPortView]) {
+  val required: SelectBag[ChiselPortView] = SelectBag(requiredImp)
+  val optional: SelectBag[Option[ChiselPortView]] = SelectBag(optionalImp)
 }
 
 sealed trait BusInterfaceView {
-  def blackBoxParams: ParameterBag
   def busProperties: ExpressionBag
-  def portMap: PortBag
+  def portMap: LazyPortViewBag
 }
 
+sealed trait BusDefinitionView {
+  def busProperties: ExpressionBag
+  def portMap: ChiselPortViewBag
+}
 
 object BusInterfaceView {
   def apply(bbParams: ParameterBag, component: DUH.Component, busInterface: DUH.BusInterface): BusInterfaceView = {
     val blackBoxPortBag = BlackBoxPortBag(bbParams, component)
     new BusInterfaceView {
-      val blackBoxParams = bbParams
-      val busProperties = BusPropertyBag(blackBoxParams, busInterface)
+      val busProperties = BusPropertyBag(bbParams, busInterface)
       val portMap = BusInterfacePortMap(blackBoxPortBag, busInterface)
     }
   }
 }
 
+case class DUHIO(portViewThunks: List[() => ChiselPortView]) extends Record {
+  final val portViews: List[ChiselPortView] = portViewThunks.map(_())
+  final val elements = ListMap((portViews.map { case view => view.name -> view.data }): _*)
+
+
+  override def cloneType: this.type = {
+    DUHIO(portViewThunks).asInstanceOf[this.type]
+  }
+}
+
 object BlackBoxPortBag {
-  def apply(blackBoxParams: ParameterBag, comp: DUH.Component): PortBag = {
-    val getByName = comp.ports.map(port => port.name -> port).toMap.get(_)
-    new PortBag {
-      def optional = new OptionalPortBag {
-        def selectDynamic(name: String) = getByName(name)
-      }
-      def required = new RequiredPortBag {
-        def selectDynamic(name: String) = optional.selectDynamic(name)
-          .getOrElse(throw new ViewException(s"no port named $name"))
-      }
-    }
+  private case class LazyPortViewImp(
+    name: String,
+    width: Int,
+    direction: DUH.Direction) extends LazyPortView
+
+  private def toLazyPortView(params: ParameterBag, port: DUH.Port): LazyPortView = {
+    LazyPortViewImp(
+      name = port.name,
+      width = params.evaluate[BigInt](port.wire.width).toInt,
+      direction = port.wire.analogDirection.getOrElse(port.wire.direction))
+  }
+
+  def apply(blackBoxParams: ParameterBag, comp: DUH.Component): LazyPortViewBag = {
+    val optionalImp: String => Option[LazyPortView] =
+      comp.ports.map(port => port.name -> toLazyPortView(blackBoxParams, port)).toMap.get(_)
+
+    val requiredImp: String => LazyPortView = name =>
+      optionalImp(name).getOrElse(throw new ViewException(s"no port named $name"))
+
+    new LazyPortViewBag(requiredImp, optionalImp)
+  }
+
+  def apply(io: DUHIO): ChiselPortViewBag = {
+    val getByName: String => Option[ChiselPortView] =
+      io.portViews.map(view => view.name -> view).toMap.get(_)
+
+    new ChiselPortViewBag(
+      requiredImp = name => getByName(name).getOrElse(throw new ViewException(s"no port named $name")),
+      optionalImp = getByName)
   }
 }
 
 object BusInterfacePortMap {
-  def apply(blackBoxPortBag: PortBag, busInterface: DUH.BusInterface): PortBag = {
+  def apply(blackBoxPortBag: LazyPortViewBag, busInterface: DUH.BusInterface): LazyPortViewBag = {
 
     val getByNameOpt = busInterface.rtlView.portMaps match {
       case DUH.FieldPortMaps(map) => Some(map.get(_: String))
@@ -193,7 +241,7 @@ object BusInterfacePortMap {
     def forceIndex(index: Int): String =
         getByIndexOpt.getOrElse(throw new ViewException(s"bus interface has an object port map"))(index)
           .getOrElse(throw new ViewException(s"index $index is out of bounds"))
-
+/*
     val optionalBag = new OptionalPortBag {
       def selectDynamic(name: String) = blackBoxPortBag.optional.selectDynamic(forceName(name))
       def applyDynamic(index: Int) = blackBoxPortBag.optional.selectDynamic(forceIndex(index))
@@ -203,69 +251,10 @@ object BusInterfacePortMap {
       def selectDynamic(name: String) = blackBoxPortBag.required.selectDynamic(forceName(name))
       def applyDynamic(index: Int) = blackBoxPortBag.required.selectDynamic(forceIndex(index))
     }
-
-    new PortBag {
-      def optional = optionalBag
-      def required = requiredBag
-    }
-  }
-}
-
-trait BusImplementation {
-  type SlaveNode
-  type MasterNode
-  type ExternalParams
-
-  def makeSlaveNode(view: BusInterfaceView, extParams: ExternalParams): SlaveNode
-}
-
-case class AXI4BusImpExternalParams(
-  baseAddress: Long,
-  resources: Seq[Resource],
-  executable: Boolean,
-  canInterleave: Boolean)
-
-object AXI4BusImplementation extends BusImplementation {
-  type SlaveNode = AXI4SlaveNode
-  type MasterNode = AXI4MasterNode
-  type ExternalParams = AXI4BusImpExternalParams
-
-  def makeSlaveNode(view: BusInterfaceView, extParams: ExternalParams): SlaveNode = {
-    val params = view.blackBoxParams
-    val properties = view.busProperties
-    val ports = view.portMap
-
-    val dataWidth = params.evaluate[BigInt](ports.required.RDATA.wire.width).toInt
-    val addrWidth = params.evaluate[BigInt](ports.required.ARADDR.wire.width).toInt
-    val maxTransferSize = properties.optional.maxTransferSize[BigInt].map(_.toInt).getOrElse(dataWidth / 8)
-    val writeTransferSizes = TransferSizes(1, maxTransferSize)
-    val readTransferSizes = TransferSizes(1, maxTransferSize)
-    val executable = extParams.executable
-    val canInterleave = extParams.canInterleave // TODO: non-integer expressions: properties.optional.canInterleave[Boolean].getOrElse(true)
-    val axiNode = AXI4SlaveNode(Seq(
-      AXI4SlavePortParameters(
-        slaves = Seq(
-          AXI4SlaveParameters(
-            address       = List(AddressSet(extParams.baseAddress, ((1L << addrWidth) - 1))),
-            executable    = executable,
-            supportsWrite = writeTransferSizes,
-            supportsRead  = readTransferSizes,
-            interleavedId = if (canInterleave) { Some(0) } else { None }, // TODO: need boolean params
-            resources     = extParams.resources
-          )
-        ),
-        beatBytes = dataWidth / 8
-      )
-    ))
-
-    axiNode
-  }
-
-  def demo(params: JValue, comp: DUH.Component): Unit = {
-    println(
-      makeSlaveNode(
-        BusInterfaceView(ParameterBag(params), comp, comp.busInterfaces.head),
-        AXI4BusImpExternalParams(0x4000, Nil, false, true))
-      )
+*/
+    new LazyPortViewBag(
+      requiredImp = name => blackBoxPortBag.required.selectDynamic(forceName(name)),
+      optionalImp = name => blackBoxPortBag.optional.selectDynamic(forceName(name))
+    )
   }
 }

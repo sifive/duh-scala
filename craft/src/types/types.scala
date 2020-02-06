@@ -42,7 +42,7 @@ object Direction {
     case "in" => J.pass(Input)
     case "out" => J.pass(Output)
     case "inout" => J.pass(Inout)
-    case string => J.fail(s"$string is not a valid direction")
+    case other => J.fail(s"$other is not a valid direction")
   }
 }
 
@@ -464,9 +464,9 @@ object BusRTLView {
 
 
 sealed trait InterfaceMode
-case object Master extends InterfaceMode
-case object Slave extends InterfaceMode
-case object Monitor extends InterfaceMode
+case object Source extends InterfaceMode // maps to 'master' in DUH
+case object Sink extends InterfaceMode // maps to 'slave' in DUH
+case object Monitor extends InterfaceMode // maps to 'monitor' in DUH
 
 
 sealed trait BusInterface {
@@ -489,8 +489,9 @@ object BusInterface {
       busType = J.field("busType", BusInterfaceType.fromJSON),
       name = J.field("name", J.string),
       mode = J.field("interfaceMode", J.string {
-        case "master" => J.pass(Master)
-        case "slave" => J.pass(Slave)
+        case "master" => J.pass(Source)
+        case "slave" => J.pass(Sink)
+        case "monitor" => J.pass(Monitor)
         case other => J.fail(s"$other is not a valid bus interface mode")
       }),
       rtlView = J.field("abstractionTypes", J.arrFind(

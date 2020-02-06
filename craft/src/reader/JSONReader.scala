@@ -29,7 +29,7 @@ object DUHScala extends App {
       val component = J.field("component", duh.scala.types.Component.fromJSON)(parsed)
       println(component.map(comp => Driver.toFirrtl(Driver.elaborate(() => new Module {
         val thunk = J.get(duh.scala.exporters.blackBox(params, comp))
-        duh.scala.views.AXI4BusImplementation.demo(params, comp)
+        duh.scala.implementation.AXI4BusImplementation.demo(params, comp)
 
         val bbox = Module(thunk())
         val io = IO(bbox.io.cloneType)
