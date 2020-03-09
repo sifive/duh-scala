@@ -6,7 +6,7 @@ import scala.collection.immutable.ListMap
 import duh.scala.{types => DUH}
 import org.json4s.JsonAST._
 import scala.language.dynamics
-import duh.scala.{decoders => J}
+import duh.{decoders => J}
 
 sealed trait LazyPortView {
   def name: String
@@ -43,12 +43,14 @@ sealed trait ExpressionEvaluator[T] {
 
 object ExpressionEvaluator {
   implicit val intExpressions: ExpressionEvaluator[BigInt] = new ExpressionEvaluator[BigInt] {
-    def apply(params: ParameterBag, expr: DUH.Expression): BigInt = expr match {
-      case DUH.Parameter(name) => params.required.selectDynamic[BigInt](name)
-      case DUH.Negate(child) => -apply(params, child)
-      case lit: DUH.IntegerLiteral => lit.value
-      case lit: DUH.Literal => throw new ViewException(s"expression '${expr}' has the wrong type")
-    }
+    def apply(params: ParameterBag, expr: DUH.Expression): BigInt =
+      DUH.Expression.evaluate(expr, params.jvalue).map {
+        case DUH.Expression.IntLit(i) => i
+        case _ => throw new ViewException(s"expression '${expr}' has the wrong type")
+      } match {
+        case Right(i) => i
+        case Left(e) => throw new ViewException(e.cause)
+      }
   }
 }
 
@@ -62,6 +64,7 @@ sealed trait OptionalParameterBag extends Dynamic {
 }
 
 sealed trait ParameterBag {
+  private[views] def jvalue: JValue
   def required: RequiredParameterBag
   def optional: OptionalParameterBag
   def evaluate[T: ExpressionEvaluator](expr: DUH.Expression): T
@@ -71,10 +74,10 @@ class ViewException(msg: String) extends Exception(msg)
 
 object ParameterBag {
   def apply(j: JValue): ParameterBag = new ParameterBag {
-    val json = j
+    val jvalue = j
     val optional = new OptionalParameterBag {
       def selectDynamic[T: ParameterDecoder](name: String): Option[T] =
-        J.fieldOption(name, implicitly[ParameterDecoder[T]].decoder)(json).getOrElse {
+        J.fieldOption(name, implicitly[ParameterDecoder[T]].decoder)(jvalue).getOrElse {
           throw new ViewException(s"optional parameter '$name' has the wrong type")
         }
     }
@@ -195,10 +198,16 @@ object BlackBoxPortBag {
     direction: DUH.Direction) extends LazyPortView
 
   private def toLazyPortView(params: ParameterBag, port: DUH.Port): LazyPortView = {
-    LazyPortViewImp(
-      name = port.name,
-      width = params.evaluate[BigInt](port.wire.width).toInt,
-      direction = port.wire.analogDirection.getOrElse(port.wire.direction))
+    val width = params.evaluate[BigInt](port.wire.width).toInt
+    val direction = port.wire.analogDirection.flatMap(_ => port.wire.direction)
+    (width, direction) match {
+      case (w, None) if w > 0 =>
+        LazyPortViewImp(name = port.name, width = w, direction = DUH.Input)
+      case (w, None) =>
+        LazyPortViewImp(name = port.name, width = -w, direction = DUH.Output)
+      case (w, Some(d)) =>
+        LazyPortViewImp(name = port.name, width = w, direction = d)
+    }
   }
 
   def apply(blackBoxParams: ParameterBag, comp: DUH.Component): LazyPortViewBag = {

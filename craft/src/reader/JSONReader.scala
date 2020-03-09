@@ -2,7 +2,7 @@
 package duh.scala
 
 import java.io.File
-import duh.scala.{decoders => J}
+import duh.{decoders => J}
 import chisel3._
 import org.json4s.jackson.JsonMethods.parse
 import duh.scala.{types => DUH}

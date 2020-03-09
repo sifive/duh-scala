@@ -57,7 +57,7 @@ object ChiselScopeOutputs {
     new ChiselScopeOutputs[T] {
       val mapping = mappingInput
       val sideband = sidebandInput
-      val 
+      ???
     }
 }
 
@@ -114,65 +114,6 @@ object AXI4BusImplementation extends BusImplementation {
   }
 
   def placeChiselScope(inputs: ChiselScopeInputs[ExternalParams, LazyScopeSideband]): ChiselScopeOutputs[ChiselScopeSideband] = {
-    val bundle = inputs.sideband.in(0)._1
-
-    val aw = {
-      bundle.aw.valid: 1,
-      bundle.aw.ready: -1,
-      bundle.aw.bits.id: 'awIdWidth',
-      bundle.aw.bits.addr: 'awAddrWidth',
-      bundle.aw.bits.len: 8,
-      bundle.aw.bits.size: 3,
-      bundle.aw.bits.burst: 2,
-      bundle.aw.bits.lock: 1,
-      bundle.aw.bits.cache: 4,
-      bundle.aw.bits.prot: 3,
-      bundle.aw.bits.qos: 4,
-      bundle.aw.bits.region: 0.U
-    }
-
-    val w = {
-      bundle.w.valid: 1,
-      bundle.w.ready: -1,
-      bundle.w.bits.data: 'wDataWidth',
-      bundle.w.bits.strb: 'wStrbWidth',
-      bundle.w.bits.last: 1
-    }
-
-    val b = {
-      bundle.b.valid: -1,
-      bundle.b.ready: 1,
-      bundle.b.bits.id: '-bIdWidth',
-      bundle.b.bits.resp: -2
-      // user: '-bUserWidth' // not in IP-XACT
-    }
-
-    val ar = {
-      bundle.ar.valid: 1,
-      bundle.ar.ready: -1,
-      bundle.ar.bits.id: 'arIdWidth',
-      bundle.ar.bits.addr: 'addrWidth',
-      bundle.ar.bits.len: 8,
-      bundle.ar.bits.size: 3,
-      bundle.ar.bits.burst: 2,
-      bundle.ar.bits.lock: 1,
-      bundle.ar.bits.cache: 4,
-      bundle.ar.bits.prot: 3,
-      bundle.ar.bits.qos: 4,
-      bundle.ar.bits.region: 0.U
-        // user: 'arUserWidth' // not in IP-XACT
-    }
-
-    val r = {
-      bundle.r.valid: -1,
-      bundle.r.ready: 1,
-      bundle.r.bits.id: '-rIdWidth',
-      bundle.r.bits.data: '-dataWidth',
-      bundle.r.bits.resp: -2,
-      bundle.r.bits.last: -1
-        // user: 'rUserWidth' // not in IP-XACT
-    }
-    
     ???
   }
 
@@ -181,7 +122,7 @@ object AXI4BusImplementation extends BusImplementation {
       placeLazyScope(new LazyScopeInputs[ExternalParams] {
         val view = BusInterfaceView(ParameterBag(params), comp, comp.busInterfaces.head)
         val extParams = AXI4BusImpExternalParams(0x4000, Nil, false, true)
-      })
+      }).sideband
     )
   }
 }

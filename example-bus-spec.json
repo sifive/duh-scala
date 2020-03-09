@@ -1,0 +1,751 @@
+{
+ "vendor": "amba.com",
+ "library": "AMBA4",
+ "name": "AXI4",
+ "version": "r0p0_0",
+  "ports": {
+   "ACLK": {
+    "description": "Global clock signal. All signals are sampled on the rising edge of the global clock",
+    "wire": {
+     "isClock": true,
+     "onMaster": {
+      "presence": "optional",
+      "width": 1,
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 1,
+      "direction": "in"
+     },
+     "requiresDriver": true
+    }
+   },
+   "ACLKEN": {
+    "description": "Clock enable signal. Used as a qualifier for the ACLK signal. This signal indicates which rising edges of ACLK should be acted upon: 1 = valid rising edge of ACLK, 0 = any rising edge of ACLK should be ignored and no bus-state altered.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 1,
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 1,
+      "direction": "in"
+     },
+     "defaultValue": 1
+    },
+    "vendorExtensions": []
+   },
+   "ARESETn": {
+    "description": "Global reset signal. This signal is active LOW",
+    "wire": {
+     "isReset": true,
+     "onMaster": {
+      "presence": "optional",
+      "width": 1,
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 1,
+      "direction": "in"
+     },
+     "requiresDriver": true
+    }
+   },
+   "AWID": {
+    "description": "Write address ID. This signal is the identification tag for the write address group of signals.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "AWADDR": {
+    "description": "Write address. The write address bus gives the address of the first transfer in a write burst transaction. The associated control signals are used to determine the addresses of the remaining transfers in the burst.",
+    "wire": {
+     "isAddress": true,
+     "onMaster": {
+      "presence": "required",
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "direction": "in"
+     }
+    }
+   },
+   "AWLEN": {
+    "description": "Burst length. The burst length gives the exact number of transfers in a burst. This information determines the number of data transfers associated with the address.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 8,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 8,
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "AWSIZE": {
+    "description": "Burst size. This signal indicates the size of each transfer in the burst. Byte lane strobes indicate exactly which byte lanes to update.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 3,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 3,
+      "direction": "in"
+     }
+    },
+    "vendorExtensions": []
+   },
+   "AWBURST": {
+    "description": "Burst type. The burst type, coupled with the size information, details how the address for each transfer within the burst is calculated.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 2,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 2,
+      "direction": "in"
+     },
+     "defaultValue": 1
+    }
+   },
+   "AWLOCK": {
+    "description": "Lock type. This signal provides additional information about the atomic characteristics of the transfer. The AMBA AXI4 Protocol does not support locked transfer sequences. This signal indicates an exclusive access (mapped to AxLOCK[0] from the AMBA AXI3 specification).",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 1,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 1,
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "AWCACHE": {
+    "description": "Cache type. This signal indicates the bufferable, cacheable, write-through, write-back, and allocate attributes of the transaction.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "AWPROT": {
+    "description": "Protection type. This signal indicates the normal, privileged, or secure protection level of the transaction and whether the transaction is a data access or an instruction access.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 3,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 3,
+      "direction": "in"
+     }
+    }
+   },
+   "AWQOS": {
+    "description": "Quality of service value. 4-bit QoS identifier sent on the write address channel for each write transaction",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "AWREGION": {
+    "description": "Slave region identifier sent on the read address channel for each transaction",
+    "wire": {
+     "isAddress": true,
+     "onMaster": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "AWVALID": {
+    "description": "Write address valid. This signal indicates that valid write address and control information are available: 1 = address and control information available, 0 = address and control information not available. The address and control information remain stable until the address acknowledge signal, AWREADY, goes HIGH.",
+    "wire": {
+     "onMaster": {
+      "presence": "required",
+      "width": 1,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 1,
+      "direction": "in"
+     }
+    }
+   },
+   "AWREADY": {
+    "description": "Write address ready. This signal indicates that the slave is ready to accept an address and associated control signals: 1 = slave ready, 0 = slave not ready.",
+    "wire": {
+     "onMaster": {
+      "presence": "required",
+      "width": 1,
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 1,
+      "direction": "out"
+     }
+    }
+   },
+   "WID": {
+    "description": "Write ID tag. This signal is the ID tag of the write data transfer. The WID value must match the AWID value of the write transaction.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "in"
+     }
+    }
+   },
+   "WDATA": {
+    "description": "Write data. The write data bus can be 8, 16, 32, 64, 128, 256, 512, or 1024 bits wide",
+    "wire": {
+     "isData": true,
+     "onMaster": {
+      "presence": "required",
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "direction": "in"
+     }
+    },
+    "vendorExtensions": []
+   },
+   "WSTRB": {
+    "description": "Write strobes. This signal indicates which byte lanes to update in memory. There is one write strobe for each eight bits of the write data bus. ",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "direction": "in"
+     },
+     "defaultValue": "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+    }
+   },
+   "WLAST": {
+    "description": "Write last. This signal indicates the last transfer in a write burst",
+    "wire": {
+     "onMaster": {
+      "presence": "required",
+      "width": 1,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 1,
+      "direction": "in"
+     }
+    }
+   },
+   "WVALID": {
+    "description": "Write valid. This signal indicates that valid write data and strobes are available: 1 = write data and strobes available, 0 = write data and strobes not available.",
+    "wire": {
+     "onMaster": {
+      "presence": "required",
+      "width": 1,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 1,
+      "direction": "in"
+     }
+    }
+   },
+   "WREADY": {
+    "description": "Write ready. This signal indicates that the slave can accept the write data: 1 = slave ready, 0 = slave not ready.",
+    "wire": {
+     "onMaster": {
+      "presence": "required",
+      "width": 1,
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 1,
+      "direction": "out"
+     }
+    }
+   },
+   "BID": {
+    "description": "Response ID. The identification tag of the write response. The BID value must match the AWID value of the write transaction to which the slave is responding.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "direction": "out"
+     }
+    }
+   },
+   "BRESP": {
+    "description": "Write response. This signal indicates the status of the write transaction. The allowable responses are OKAY, EXOKAY, SLVERR, and DECERR.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 2,
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 2,
+      "direction": "out"
+     },
+     "defaultValue": 0
+    }
+   },
+   "BVALID": {
+    "description": "Write response valid. This signal indicates that a valid write response is available: 1 = write response available, 0 = write response not available.",
+    "wire": {
+     "onMaster": {
+      "presence": "required",
+      "width": 1,
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 1,
+      "direction": "out"
+     }
+    }
+   },
+   "BREADY": {
+    "description": "Response ready. This signal indicates that the master can accept the response information. 1 = master ready, 0 = master not ready.",
+    "wire": {
+     "onMaster": {
+      "presence": "required",
+      "width": 1,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 1,
+      "direction": "in"
+     }
+    }
+   },
+   "ARID": {
+    "description": "Read address ID. This signal is the identification tag for the read address group of signals.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "ARADDR": {
+    "description": "Read address. The read address bus gives the initial address of a read burst transaction. Only the start address of the burst is provided and the control signals that are issued alongside the address detail how the address is calculated for the remaining transfers in the burst.",
+    "wire": {
+     "isAddress": true,
+     "onMaster": {
+      "presence": "required",
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "ARLEN": {
+    "description": "Burst length. The burst length gives the exact number of transfers in a burst. This information determines the number of data transfers associated with the address.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 8,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 8,
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "ARSIZE": {
+    "description": "Burst size. This signal indicates the size of each transfer in the burst",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 3,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 3,
+      "direction": "in"
+     }
+    },
+    "vendorExtensions": []
+   },
+   "ARBURST": {
+    "description": "Burst type. The burst type, coupled with the size information, details how the address for each transfer within the burst is calculated.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 2,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 2,
+      "direction": "in"
+     },
+     "defaultValue": 1
+    }
+   },
+   "ARLOCK": {
+    "description": "Lock type. This signal provides additional information about the atomic characteristics of the transfer. The AMBA AXI4 Protocol does not support locked transfer sequences. This signal indicates an exclusive access (mapped to AxLOCK[0] from the AMBA AXI3 specification).",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 1,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 1,
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "ARCACHE": {
+    "description": "Cache type. This signal provides additional information about the cacheable characteristics of the transfer.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "ARPROT": {
+    "description": "Protection type. This signal provides protection unit information for the transaction",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 3,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 3,
+      "direction": "in"
+     }
+    }
+   },
+   "ARQOS": {
+    "description": "Quality of service value. 4-bit QoS identifier sent on the write address channel for each read transaction",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "ARREGION": {
+    "description": "Slave region identifier sent on the read address channel for each transaction",
+    "wire": {
+     "isAddress": true,
+     "onMaster": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 4,
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "ARVALID": {
+    "description": "Read address valid. This signal indicates, when HIGH, that the read address and control information is valid and will remain stable until the address acknowledge signal, ARREADY, is high.\n1 = address and control information valid, 0 = address and control information not valid.",
+    "wire": {
+     "onMaster": {
+      "presence": "required",
+      "width": 1,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 1,
+      "direction": "in"
+     }
+    }
+   },
+   "ARREADY": {
+    "description": "Read address ready. This signal indicates that the slave is ready to accept an address and associated control signals: 1 = slave ready, 0 = slave not ready.",
+    "wire": {
+     "onMaster": {
+      "presence": "required",
+      "width": 1,
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 1,
+      "direction": "out"
+     }
+    }
+   },
+   "RID": {
+    "description": "Read ID tag. This signal is the ID tag of the read data group of signals. The RID value is generated by the slave and must match the ARID value of the read transaction to which it is responding.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "direction": "out"
+     }
+    }
+   },
+   "RDATA": {
+    "description": "Read data. The read data bus can be 8, 16, 32, 64, 128, 256, 512, or 1024 bits wide",
+    "wire": {
+     "isData": true,
+     "onMaster": {
+      "presence": "required",
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "required",
+      "direction": "out"
+     }
+    },
+    "vendorExtensions": []
+   },
+   "RRESP": {
+    "description": "Read response. This signal indicates the status of the read transfer. The allowable responses are OKAY, EXOKAY, SLVERR, and DECERR.",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 2,
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "width": 2,
+      "direction": "out"
+     },
+     "defaultValue": 0
+    }
+   },
+   "RLAST": {
+    "description": "Read last. This signal indicates the last transfer in a read burst",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "width": 1,
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 1,
+      "direction": "out"
+     }
+    }
+   },
+   "RVALID": {
+    "description": "Read valid. This signal indicates that the required read data is available and the read transfer can complete: 1 = read data available, 0 = read data not available.",
+    "wire": {
+     "onMaster": {
+      "presence": "required",
+      "width": 1,
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 1,
+      "direction": "out"
+     }
+    }
+   },
+   "RREADY": {
+    "description": "Read ready. This signal indicates that the master can accept the read data and response information: 1= master ready, 0 = master not ready.",
+    "wire": {
+     "onMaster": {
+      "presence": "required",
+      "width": 1,
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "required",
+      "width": 1,
+      "direction": "in"
+     }
+    }
+   },
+   "AWUSER": {
+    "description": "Write Address User. This signal provides sideband signals on the write address channel which are valid at the same time as the other AW signals. Use of the AWUSER signal is implementation specific.",
+    "isUser": true,
+    "group": "AW",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "WUSER": {
+    "description": "Write User. This signal provides sideband signals on the write channel which are valid at the same time as the other W signals. Use of the WUSER signal is implementation specific.",
+    "isUser": true,
+    "group": "W",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "BUSER": {
+    "description": "Write Response User. This signal provides sideband signals on the write response channel which are valid at the same time as the other B signals. Use of the BUSER signal is implementation specific.",
+    "isUser": true,
+    "group": "B",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "direction": "out"
+     },
+     "defaultValue": 0
+    }
+   },
+   "ARUSER": {
+    "description": "Read Address User. This signal provides sideband signals on the read address channel which are valid at the same time as the other AR signals. Use of the ARUSER signal is implementation specific.",
+    "isUser": true,
+    "group": "AR",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "direction": "out"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "direction": "in"
+     },
+     "defaultValue": 0
+    }
+   },
+   "RUSER": {
+    "description": "Read User. This signal provides sideband signals on the read channel which are valid at the same time as the other R signals. Use of the RUSER signal is implementation specific.",
+    "isUser": true,
+    "group": "R",
+    "wire": {
+     "onMaster": {
+      "presence": "optional",
+      "direction": "in"
+     },
+     "onSlave": {
+      "presence": "optional",
+      "direction": "out"
+     },
+     "defaultValue": 0
+    }
+   }
+  },
+  "description": "This defines the signals when implementing an AXI4 interface on RTL views.",
+  "vendorExtensions": []
+}

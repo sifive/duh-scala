@@ -1,5 +1,5 @@
 // See LICENSE for license details.
-package duh.scala
+package duh
 
 import org.json4s.JsonAST._
 import scala.reflect.macros.whitebox
@@ -110,7 +110,7 @@ package object decoders {
       def rmap(result: Tree, elem: TermName, value: Tree) = {
         val errorName = TermName(c.freshName("error"))
         q"""$result match {
-          case scala.util.Left($errorName) => duh.scala.decoders.fail($errorName)
+          case scala.util.Left($errorName) => duh.decoders.fail($errorName)
           case scala.util.Right($elem) => $value
         }"""
       }
@@ -124,7 +124,7 @@ package object decoders {
         val args = nameArgResult.map {
           case (name, arg, result) => q"""$name = $arg"""
         }
-        q"""duh.scala.decoders.pass($fn(..$args))"""
+        q"""duh.decoders.pass($fn(..$args))"""
       }
 
       nameArgResult.foldRight(lastValue: Tree) {

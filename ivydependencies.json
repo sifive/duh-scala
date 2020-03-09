@@ -2,7 +2,8 @@
   "json-decoders": {
     "scalaVersion": "2.12.8",
     "dependencies": [
-      "org.json4s::json4s-jackson:3.6.1"
+      "org.json4s::json4s-jackson:3.6.1",
+      "com.lihaoyi::fastparse:2.2.2"
     ]
   },
   "duh-scala": {

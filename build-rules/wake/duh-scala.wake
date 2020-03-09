@@ -28,6 +28,9 @@ global def asdf Unit =
   "{duhScalaRoot}/example.json"
   (source "{duhScalaRoot}/example-bus-spec.json", Nil)
 
+global def lkj Unit =
+  duhExportBus "{duhScalaRoot}/example-bus-spec.json"
+
 global def duhExportScala paramsFile jsonFile visible =
   def jars = scalaModuleClasspath duhScalaScalaModule
   def classpath =
