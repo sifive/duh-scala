@@ -3,5 +3,10 @@
         "commit": "a256c63893d02d9d501907e22517fc7ffb72df55",
         "name": "rocket-chip",
         "source": "git@github.com:chipsalliance/rocket-chip.git"
+    },
+    {
+        "commit": "39d6d74e5667248d31f2c27e3bd497061c24539d",
+        "name": "api-scala-sifive",
+        "source": "git@github.com:sifive/api-scala-sifive.git"
     }
 ]
