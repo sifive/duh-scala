@@ -203,6 +203,7 @@ object Expression {
           case (BinOp.BitOr, IntLit(li), IntLit(ri)) => J.pass(IntLit(li | ri))
           case (BinOp.BitXor, IntLit(li), IntLit(ri)) => J.pass(IntLit(li ^ ri))
           case (BinOp.BitAnd, IntLit(li), IntLit(ri)) => J.pass(IntLit(li & ri))
+
           case (CompOp.Eq, op1, op2) => J.pass(BoolLit(op1 == op2))
           case (CompOp.NotEq, op1, op2) => J.pass(BoolLit(op1 != op2))
           case (CompOp.Lt, IntLit(li), IntLit(ri)) => J.pass(BoolLit(li < ri))

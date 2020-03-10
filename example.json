@@ -44,6 +44,7 @@
     ],
     "connectionRequired": true,
     "props": {
+     "canInterleave": 0,
      "write_interleaving_depth": 1,
      "read_reordering_depth": 1,
      "write_reordering_depth": 1,

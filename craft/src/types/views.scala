@@ -6,6 +6,7 @@ import scala.collection.immutable.ListMap
 import duh.scala.{types => DUH}
 import org.json4s.JsonAST._
 import scala.language.dynamics
+import scala.language.higherKinds
 import duh.{decoders => J}
 
 sealed trait LazyPortView {
@@ -52,6 +53,28 @@ object ExpressionEvaluator {
         case Left(e) => throw new ViewException(e.cause)
       }
   }
+
+  implicit val decExpressions: ExpressionEvaluator[BigDecimal] = new ExpressionEvaluator[BigDecimal] {
+    def apply(params: ParameterBag, expr: DUH.Expression): BigDecimal =
+      DUH.Expression.evaluate(expr, params.jvalue).map {
+        case DUH.Expression.DecLit(i) => i
+        case _ => throw new ViewException(s"expression '${expr}' has the wrong type")
+      } match {
+        case Right(i) => i
+        case Left(e) => throw new ViewException(e.cause)
+      }
+  }
+
+  implicit val boolExpressions: ExpressionEvaluator[Boolean] = new ExpressionEvaluator[Boolean] {
+    def apply(params: ParameterBag, expr: DUH.Expression): Boolean =
+      DUH.Expression.evaluate(expr, params.jvalue).map {
+        case DUH.Expression.BoolLit(i) => i
+        case _ => throw new ViewException(s"expression '${expr}' has the wrong type")
+      } match {
+        case Right(i) => i
+        case Left(e) => throw new ViewException(e.cause)
+      }
+  }
 }
 
 
@@ -61,6 +84,8 @@ sealed trait RequiredParameterBag extends Dynamic {
 
 sealed trait OptionalParameterBag extends Dynamic {
   def selectDynamic[T: ParameterDecoder](name: String): Option[T]
+  def applyDynamic[T: ParameterDecoder](name: String)(default: => T): T =
+    selectDynamic(name).getOrElse(default)
 }
 
 sealed trait ParameterBag {
@@ -99,6 +124,8 @@ sealed trait RequiredExpressionBag extends Dynamic {
 
 sealed trait OptionalExpressionBag extends Dynamic {
   def selectDynamic[T: ExpressionEvaluator](name: String): Option[T]
+  def applyDynamic[T: ExpressionEvaluator](name: String)(default: => T): T =
+    selectDynamic(name).getOrElse(default)
 }
 
 sealed trait ExpressionBag {
@@ -166,12 +193,22 @@ sealed trait BusInterfaceView {
   def portMap: LazyPortViewBag
 }
 
+object BusInterfaceView {
+  def apply(bbParams: ParameterBag, component: DUH.Component, busInterface: DUH.BusInterface): BusInterfaceView = {
+    val blackBoxPortBag = BlackBoxPortBag(bbParams, component)
+    new BusInterfaceView {
+      val busProperties = BusPropertyBag(bbParams, busInterface)
+      val portMap = BusInterfacePortMap(blackBoxPortBag, busInterface)
+    }
+  }
+}
+
 sealed trait BusDefinitionView {
   def busProperties: ExpressionBag
   def portMap: ChiselPortViewBag
 }
 
-object BusInterfaceView {
+object BusDefinitionView {
   def apply(bbParams: ParameterBag, component: DUH.Component, busInterface: DUH.BusInterface): BusInterfaceView = {
     val blackBoxPortBag = BlackBoxPortBag(bbParams, component)
     new BusInterfaceView {

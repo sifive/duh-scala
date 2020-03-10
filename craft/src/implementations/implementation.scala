@@ -42,7 +42,7 @@ object LazyScopeOutputs {
 }
 
 trait ChiselScopeInputs[ExternalParams, Sideband] {
-  def view: BusInterfaceView
+  def view: BusDefinitionView
   def extParams: ExternalParams
   def sideband: Sideband
 }
@@ -82,28 +82,33 @@ object AXI4BusImplementation extends BusImplementation {
     component.getOrElse(throw new Exception("SLKDJFLKSDJKLFJ"))
   }
 
-  def placeLazyScope(inputs: LazyScopeInputs[ExternalParams]): LazyScopeOutputs[LazyScopeSideband] = {
-    val properties = inputs.view.busProperties
-    val ports = inputs.view.portMap
-    val extParams = inputs.extParams
+  def placeLazyScope(context: LazyScopeInputs[ExternalParams]): LazyScopeOutputs[LazyScopeSideband] = {
+    val properties = context.view.busProperties
+    val ports = context.view.portMap
+    val extParams = context.extParams
 
     val dataWidth = ports.required.RDATA.width
     val addrWidth = ports.required.ARADDR.width
-    val maxTransferSize = properties.optional.maxTransferSize[BigInt].map(_.toInt).getOrElse(dataWidth / 8)
-    val writeTransferSizes = TransferSizes(1, maxTransferSize)
-    val readTransferSizes = TransferSizes(1, maxTransferSize)
-    val executable = extParams.executable
-    val canInterleave = extParams.canInterleave // TODO: non-integer expressions: properties.optional.canInterleave[Boolean].getOrElse(true)
+    val maxTransferSize =
+      properties
+        .optional
+        .maxTransferSize[BigInt]
+        .map(_.toInt)
+        .getOrElse(dataWidth / 8)
+    val canInterleave =
+      properties
+        .optional
+        .canInterleave[Boolean](false)
     val axiNode = AXI4SlaveNode(Seq(
       AXI4SlavePortParameters(
         slaves = Seq(
           AXI4SlaveParameters(
-            address       = List(AddressSet(extParams.baseAddress, ((1L << addrWidth) - 1))),
-            executable    = executable,
-            supportsWrite = writeTransferSizes,
-            supportsRead  = readTransferSizes,
-            interleavedId = if (canInterleave) { Some(0) } else { None }, // TODO: need boolean params
-            resources     = extParams.resources
+            address = List(AddressSet(extParams.baseAddress, ((1L << addrWidth) - 1))),
+            executable = extParams.executable,
+            supportsWrite = TransferSizes(1, maxTransferSize),
+            supportsRead = TransferSizes(1, maxTransferSize),
+            interleavedId = if (canInterleave) { Some(0) } else { None },
+            resources = extParams.resources
           )
         ),
         beatBytes = dataWidth / 8
@@ -113,7 +118,7 @@ object AXI4BusImplementation extends BusImplementation {
     LazyScopeOutputs(axiNode)
   }
 
-  def placeChiselScope(inputs: ChiselScopeInputs[ExternalParams, LazyScopeSideband]): ChiselScopeOutputs[ChiselScopeSideband] = {
+  def placeChiselScope(context: ChiselScopeInputs[ExternalParams, LazyScopeSideband]): ChiselScopeOutputs[ChiselScopeSideband] = {
     ???
   }
 
