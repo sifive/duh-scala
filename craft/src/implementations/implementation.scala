@@ -1,6 +1,6 @@
 package duh.scala.implementation
 
-import chisel3.{Data}
+import chisel3.{Data, fromIntToLiteral}
 import scala.collection.immutable.ListMap
 import freechips.rocketchip.diplomacy.{BundleBridgeSource, TransferSizes, AddressSet, Resource}
 import freechips.rocketchip.amba.axi4.{AXI4SlaveNode, AXI4MasterNode, AXI4SlavePortParameters, AXI4SlaveParameters}
@@ -48,31 +48,19 @@ trait ChiselScopeInputs[ExternalParams, Sideband] {
 }
 
 sealed trait ChiselScopeOutputs[T] {
-  def mapping: ListMap[BusPortDefinition, Data]
   def sideband: T
 }
 
 object ChiselScopeOutputs {
-  def apply[T](mappingInput: ListMap[BusPortDefinition, Data], sidebandInput: T): ChiselScopeOutputs[T] =
+  def apply[T](sidebandInput: T): ChiselScopeOutputs[T] =
     new ChiselScopeOutputs[T] {
-      val mapping = mappingInput
       val sideband = sidebandInput
-      ???
     }
-}
-
-object Connect {
-  def applySlave(portBag: ChiselPortBag, outputs: ChiselScopeOutputs[_]): Unit = {
-    val mapping = outputs.mapping
-    mapping.map { case (portDef, data) =>
-      portDef.onSlave
-    }
-  }
 }
 
 object AXI4BusImplementation extends BusImplementation {
   type LazyScopeSideband = AXI4SlaveNode
-  type ChiselScopeResult = Unit
+  type ChiselScopeSideband = Unit
   type ExternalParams = AXI4BusImpExternalParams
 
   val mode = Sink
@@ -119,7 +107,58 @@ object AXI4BusImplementation extends BusImplementation {
   }
 
   def placeChiselScope(context: ChiselScopeInputs[ExternalParams, LazyScopeSideband]): ChiselScopeOutputs[ChiselScopeSideband] = {
-    ???
+    val nodeBundle = context.sideband.in(0)._1
+    val bbBundle = context.view.portMap.required
+    val bbBundleOpt = context.view.portMap.optional
+
+    bbBundleOpt.ACLK.map(_.data := nodeBundle.aw.valid)
+    bbBundleOpt.ACLKEN.map(_.data := nodeBundle.aw.valid)
+
+    bbBundle.AWVALID.data := nodeBundle.aw.valid
+    nodeBundle.aw.ready := bbBundle.AWREADY.data
+    bbBundle.AWID.data := nodeBundle.aw.bits.id
+    bbBundle.AWADDR.data := nodeBundle.aw.bits.addr
+    bbBundle.AWLEN.data := nodeBundle.aw.bits.len
+    bbBundle.AWSIZE.data := nodeBundle.aw.bits.size
+    bbBundle.AWBURST.data := nodeBundle.aw.bits.burst
+    bbBundleOpt.AWLOCK.map(_.data := nodeBundle.aw.bits.lock)
+    bbBundleOpt.AWCACHE.map(_.data := nodeBundle.aw.bits.cache)
+    bbBundleOpt.AWPROT.map(_.data := nodeBundle.aw.bits.prot)
+    bbBundleOpt.AWQOS.map(_.data := nodeBundle.aw.bits.qos)
+    bbBundleOpt.AWREGION.map(_.data := 4.U)
+
+    //bbBundle.WID.map(_.data := nodeBundle.w.bits.id)
+    bbBundle.WVALID.data := nodeBundle.w.valid
+    nodeBundle.w.ready := bbBundle.WREADY.data
+    bbBundle.WDATA.data := nodeBundle.w.bits.data
+    bbBundle.WSTRB.data := nodeBundle.w.bits.strb
+    bbBundleOpt.WLAST.map(_.data := nodeBundle.w.bits.last)
+
+    bbBundle.BVALID.data := nodeBundle.b.valid
+    nodeBundle.b.ready := bbBundle.BREADY.data
+    bbBundleOpt.BID.map(_.data := nodeBundle.b.bits.id)
+    bbBundleOpt.BRESP.map(_.data := nodeBundle.b.bits.resp)
+
+    bbBundle.ARVALID.data := nodeBundle.ar.valid
+    nodeBundle.ar.ready := bbBundle.ARREADY.data
+    bbBundleOpt.ARID.map(_.data := nodeBundle.ar.bits.id)
+    bbBundle.ARADDR.data := nodeBundle.ar.bits.addr
+    bbBundle.ARLEN.data := nodeBundle.ar.bits.len
+    bbBundle.ARSIZE.data := nodeBundle.ar.bits.size
+    bbBundle.ARBURST.data := nodeBundle.ar.bits.burst
+    bbBundleOpt.ARLOCK.map(_.data := nodeBundle.ar.bits.lock)
+    bbBundleOpt.ARPROT.map(_.data := nodeBundle.ar.bits.prot)
+    bbBundleOpt.ARQOS.map(_.data := nodeBundle.ar.bits.qos)
+    bbBundleOpt.ARREGION.map(_.data := 4.U)
+
+    bbBundle.RVALID.data := nodeBundle.r.valid
+    nodeBundle.r.ready := bbBundle.RREADY.data
+    bbBundleOpt.RID.map(_.data := nodeBundle.r.bits.id)
+    bbBundle.RDATA.data := nodeBundle.r.bits.data
+    bbBundleOpt.RRESP.map(_.data := nodeBundle.r.bits.resp)
+    bbBundle.RLAST.data := nodeBundle.r.bits.last
+
+    ChiselScopeOutputs(Unit)
   }
 
   def demo(params: JValue, comp: Component): Unit = {
