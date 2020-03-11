@@ -88,12 +88,12 @@ object Port {
 }
 
 sealed trait BusInterfaceType
-case class StandardBusInterface(
+final case class StandardBusInterface(
   vendor: String,
   library: String,
   name: String,
   version: String) extends BusInterfaceType
-case class NonStandardBusInterface(name: String) extends BusInterfaceType
+final case class NonStandardBusInterface(name: String) extends BusInterfaceType
 
 object StandardBusInterface {
   val fromJSON: J.Decoder[StandardBusInterface] =

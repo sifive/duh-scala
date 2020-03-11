@@ -137,7 +137,11 @@ object Expression {
     case f: Failure => J.fail("parse error: " + f.trace().label)
   }
   val fromInteger: BigInt => J.Result[Expression] = i => J.pass(IntLit(i))
-  val fromJSON: J.Decoder[Expression] = J.oneOf(J.string(fromString), J.integer(fromInteger))
+  val fromDecimal: BigDecimal => J.Result[Expression] = d => J.pass(DecLit(d))
+  val fromJSON: J.Decoder[Expression] = J.oneOf(
+    J.string(fromString),
+    J.integer(fromInteger),
+    J.decimal(fromDecimal))
   val fromBoolean: Boolean => J.Result[Expression] = b => J.pass(BoolLit(b))
 
   private def expandAccessor(acc: Accessor, tail: Seq[Accessor] = Seq.empty): Seq[Accessor] = acc match {

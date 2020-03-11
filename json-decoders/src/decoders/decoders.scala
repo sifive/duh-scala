@@ -224,21 +224,21 @@ package object decoders {
 
   def integer[T](fn: BigInt => Result[T]): Decoder[T] = {
     case JInt(num) => fn(num)
-    case _ => fail("not a JInt")
+    case JLong(num) => fn(BigInt(num))
+    case _ => fail("not a JInt or JLong")
   }
 
   val integer: Decoder[BigInt] = integer(pass(_: BigInt))
 
-
-  def double[T](fn: Double => Result[T]): Decoder[T] = {
-    case JDouble(num) => fn(num)
-    case _ => fail("not a JDouble")
+  def decimal[T](fn: BigDecimal => Result[T]): Decoder[T] = {
+    case JDecimal(num) => fn(num)
+    case JDouble(num) => fn(BigDecimal(num))
+    case _ => fail("not a JDecimal or JDouble")
   }
 
-  val double: Decoder[Double] = double(pass(_: Double))
+  val decimal: Decoder[BigDecimal] = decimal(pass(_: BigDecimal))
 
-
-  def boolean[T](fn: Boolean => Result[T]): Decoder[T] = (value: JValue) => value match {
+  def boolean[T](fn: Boolean => Result[T]): Decoder[T] = {
     case JBool(bool) => fn(bool)
     case _ => fail("not a JBool")
   }

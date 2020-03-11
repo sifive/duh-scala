@@ -1,23 +1,29 @@
 package duh.scala.implementation
 
+import duh.{decoders => J}
 import chisel3.{Data, fromIntToLiteral}
 import scala.collection.immutable.ListMap
 import freechips.rocketchip.diplomacy.{BundleBridgeSource, TransferSizes, AddressSet, Resource}
 import freechips.rocketchip.amba.axi4.{AXI4SlaveNode, AXI4MasterNode, AXI4SlavePortParameters, AXI4SlaveParameters}
 import duh.scala.views._
 import org.json4s.JsonAST._
-import duh.scala.types.{InterfaceMode, Sink, Component, BusDefinition, BusPortDefinition}
+import duh.scala.types._
+import freechips.rocketchip.diplomacy.{SimpleLazyModule, LazyModule, InModuleBody, BaseNode}
+import chipsalliance.rocketchip.config.Parameters
 
 trait BusImplementation {
-  type LazyScopeSideband
+  type Node <: BaseNode
   type ChiselScopeSideband
   type ExternalParams
 
-  def mode: InterfaceMode
-  def busDefinition: BusDefinition
+  val mode: InterfaceMode
+  val busDefinition: BusDefinition
+  def externalParamsDecoder: J.Decoder[ExternalParams]
 
-  def placeLazyScope(inputs: LazyScopeInputs[ExternalParams]): LazyScopeOutputs[LazyScopeSideband]
-  def placeChiselScope(inputs: ChiselScopeInputs[ExternalParams, LazyScopeSideband]): ChiselScopeOutputs[ChiselScopeSideband]
+  def placeLazyScope(inputs: LazyScopeInputs[ExternalParams]): LazyScopeOutputs[Node]
+  def placeChiselScope(inputs: ChiselScopeInputs[ExternalParams, Node]): Unit
+
+  private[duh] def place(eParams: JValue, lazyView: LazyBusInterfaceView): Node
 }
 
 case class AXI4BusImpExternalParams(
@@ -32,36 +38,27 @@ sealed trait LazyScopeInputs[T] {
 }
 
 sealed trait LazyScopeOutputs[T] {
-  def sideband: T
+  def node: T
 }
 
 object LazyScopeOutputs {
   def apply[T](sidebandInput: T): LazyScopeOutputs[T] = new LazyScopeOutputs[T] {
-    val sideband = sidebandInput
+    val node = sidebandInput
   }
 }
 
-trait ChiselScopeInputs[ExternalParams, Sideband] {
+trait ChiselScopeInputs[ExternalParams, Node] {
   def view: ChiselBusInterfaceView
   def extParams: ExternalParams
-  def sideband: Sideband
-}
-
-sealed trait ChiselScopeOutputs[T] {
-  def sideband: T
-}
-
-object ChiselScopeOutputs {
-  def apply[T](sidebandInput: T): ChiselScopeOutputs[T] =
-    new ChiselScopeOutputs[T] {
-      val sideband = sidebandInput
-    }
+  def node: Node
 }
 
 object AXI4BusImplementation extends BusImplementation {
-  type LazyScopeSideband = AXI4SlaveNode
+  type Node = AXI4SlaveNode
   type ChiselScopeSideband = Unit
   type ExternalParams = AXI4BusImpExternalParams
+
+  def externalParamsDecoder = _ => J.pass(AXI4BusImpExternalParams(0x4000, Nil, false, true))
 
   val mode = Sink
   val busDefinition = { // FIXME
@@ -70,7 +67,7 @@ object AXI4BusImplementation extends BusImplementation {
     component.getOrElse(throw new Exception("SLKDJFLKSDJKLFJ"))
   }
 
-  def placeLazyScope(context: LazyScopeInputs[ExternalParams]): LazyScopeOutputs[LazyScopeSideband] = {
+  def placeLazyScope(context: LazyScopeInputs[ExternalParams]): LazyScopeOutputs[Node] = {
     val properties = context.view.busProperties
     val ports = context.view.portMap
     val extParams = context.extParams
@@ -106,8 +103,8 @@ object AXI4BusImplementation extends BusImplementation {
     LazyScopeOutputs(axiNode)
   }
 
-  def placeChiselScope(context: ChiselScopeInputs[ExternalParams, LazyScopeSideband]): ChiselScopeOutputs[ChiselScopeSideband] = {
-    val nodeBundle = context.sideband.in(0)._1
+  def placeChiselScope(context: ChiselScopeInputs[ExternalParams, Node]): Unit = {
+    val nodeBundle = context.node.in(0)._1
     val bbBundle = context.view.portMap.required
     val bbBundleOpt = context.view.portMap.optional
 
@@ -125,7 +122,7 @@ object AXI4BusImplementation extends BusImplementation {
     bbBundleOpt.AWCACHE.map(_.data := nodeBundle.aw.bits.cache)
     bbBundleOpt.AWPROT.map(_.data := nodeBundle.aw.bits.prot)
     bbBundleOpt.AWQOS.map(_.data := nodeBundle.aw.bits.qos)
-    bbBundleOpt.AWREGION.map(_.data := 4.U)
+    bbBundleOpt.AWREGION.map(_.data := 0.U)
 
     //bbBundle.WID.map(_.data := nodeBundle.w.bits.id)
     bbBundle.WVALID.data := nodeBundle.w.valid
@@ -149,7 +146,7 @@ object AXI4BusImplementation extends BusImplementation {
     bbBundleOpt.ARLOCK.map(_.data := nodeBundle.ar.bits.lock)
     bbBundleOpt.ARPROT.map(_.data := nodeBundle.ar.bits.prot)
     bbBundleOpt.ARQOS.map(_.data := nodeBundle.ar.bits.qos)
-    bbBundleOpt.ARREGION.map(_.data := 4.U)
+    bbBundleOpt.ARREGION.map(_.data := 0.U)
 
     bbBundle.RVALID.data := nodeBundle.r.valid
     nodeBundle.r.ready := bbBundle.RREADY.data
@@ -157,16 +154,23 @@ object AXI4BusImplementation extends BusImplementation {
     bbBundle.RDATA.data := nodeBundle.r.bits.data
     bbBundleOpt.RRESP.map(_.data := nodeBundle.r.bits.resp)
     bbBundle.RLAST.data := nodeBundle.r.bits.last
-
-    ChiselScopeOutputs(Unit)
   }
 
-  def demo(params: JValue, comp: Component): Unit = {
-    println(
-      placeLazyScope(new LazyScopeInputs[ExternalParams] {
-        val view = LazyBusInterfaceView(ParameterBag(params), comp, comp.busInterfaces.head)
-        val extParams = AXI4BusImpExternalParams(0x4000, Nil, false, true)
-      }).sideband
-    )
+  private[duh] def place(eParamsJSON: JValue, lazyView: LazyBusInterfaceView) = {
+    implicit val p = Parameters.empty
+    val eParams = externalParamsDecoder(eParamsJSON).getOrElse(throw new ViewException("could not parse external params"))
+    val axinode = placeLazyScope(new LazyScopeInputs[ExternalParams] {
+      val view = lazyView
+      val extParams = eParams
+    }).node
+
+    InModuleBody {
+      placeChiselScope(new ChiselScopeInputs[ExternalParams, Node] {
+        val view = ChiselBusInterfaceView(lazyView)
+        val extParams = eParams
+        def node = axinode
+      })
+    }
+    axinode
   }
 }

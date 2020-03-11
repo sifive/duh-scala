@@ -10,29 +10,41 @@ import scala.language.higherKinds
 import duh.{decoders => J}
 
 import scala.collection.immutable.ListMap
+import freechips.rocketchip.diplomacy.BaseNode
 
 sealed trait LazyPortView {
   def name: String
   def width: Int
   def direction: DUH.Direction
+  private[views] lazy val data = direction match {
+    case DUH.Output => chisel3.Output(chisel3.UInt(width.W))
+    case DUH.Input => chisel3.Input(chisel3.UInt(width.W))
+    case DUH.Inout => chisel3.experimental.Analog(width.W)
+  }
 }
 
 object LazyPortView {
-  private case class LazyPortViewImp(
-    name: String,
-    width: Int,
-    direction: DUH.Direction) extends LazyPortView
-
   def apply(params: ParameterBag, port: DUH.Port): LazyPortView = {
-    val width = params.evaluate[BigInt](port.wire.width).toInt
-    val direction = port.wire.analogDirection.flatMap(_ => port.wire.direction)
-    (width, direction) match {
+    var rawWidth = params.evaluate[BigInt](port.wire.width)
+    var widthx = rawWidth match {
+      case width if width < Int.MaxValue => width.toInt
+      case tooBig => throw new ViewException(s"width of port ${port.name} is greater than Int.MaxValue")
+    }
+    val directionOpt = port.wire.analogDirection.flatMap(_ => port.wire.direction)
+    var directionx: DUH.Direction = null
+    (widthx, directionOpt) match {
       case (w, None) if w > 0 =>
-        LazyPortViewImp(name = port.name, width = w, direction = DUH.Input)
+        directionx = DUH.Input
       case (w, None) =>
-        LazyPortViewImp(name = port.name, width = -w, direction = DUH.Output)
+        widthx = -w
+        directionx = DUH.Output
       case (w, Some(d)) =>
-        LazyPortViewImp(name = port.name, width = w, direction = d)
+        directionx = d
+    }
+    new LazyPortView {
+      val name = port.name
+      val width = widthx
+      val direction = directionx
     }
   }
 }
@@ -49,7 +61,7 @@ object ParameterDecoder {
     }
 
   implicit val intParams: ParameterDecoder[BigInt] = apply(J.integer)
-  implicit val doubleParams: ParameterDecoder[Double] = apply(J.double)
+  implicit val decimalParams: ParameterDecoder[BigDecimal] = apply(J.decimal)
   implicit val stringParams: ParameterDecoder[String] = apply(J.string)
   implicit val booleanParams: ParameterDecoder[Boolean] = apply(J.boolean)
   implicit val bagParams: ParameterDecoder[ParameterBag] = apply(json => J.pass(ParameterBag(json)))
@@ -185,7 +197,10 @@ object BusPropertyBag {
   }
 }
 
-final class SelectBag[T] private(imp: String => T) extends Dynamic {
+final class SelectBag[T] private (imp: String => T) extends Dynamic {
+  private[views] def map[B](fn: T => B): SelectBag[B] =
+    new SelectBag((x: String) => fn(imp(x)))
+
   def selectDynamic(name: String): T = imp(name)
 }
 
@@ -193,22 +208,25 @@ object SelectBag {
   def apply[T](imp: String => T): SelectBag[T] = new SelectBag(imp)
 }
 
-final class LazyPortViewBag private[views](
-  requiredImp: String => LazyPortView,
-  optionalImp: String => Option[LazyPortView]) {
-  val required: SelectBag[LazyPortView] = SelectBag(requiredImp)
-  val optional: SelectBag[Option[LazyPortView]] = SelectBag(optionalImp)
+sealed trait LazyPortViewBag {
+  def required: SelectBag[LazyPortView]
+  def optional: SelectBag[Option[LazyPortView]]
 }
 
 object LazyPortViewBag {
   def apply(blackBoxParams: ParameterBag, comp: DUH.Component): LazyPortViewBag = {
-    val optionalImp: String => Option[LazyPortView] =
-      comp.ports.map(port => port.name -> LazyPortView(blackBoxParams, port)).toMap.get(_)
+    new LazyPortViewBag {
+      val portSeq = comp.ports.map(port => port.name -> LazyPortView(blackBoxParams, port))
+      val portMap = portSeq.toMap
+      val optional = SelectBag(portMap.get)
 
-    val requiredImp: String => LazyPortView = name =>
-      optionalImp(name).getOrElse(throw new ViewException(s"no port named $name"))
+      val required = SelectBag(name =>
+        portMap.get(name).getOrElse(throw new ViewException(s"no port named $name")))
 
-    new LazyPortViewBag(requiredImp, optionalImp)
+      lazy val blackbox =  Module(new BlackBox {
+        val io = IO(new DynamicIO(() => portSeq.map { case (k, v) => k -> v.data }))
+      })
+    }
   }
 }
 
@@ -221,34 +239,27 @@ object LazyBusInterfaceView {
   private[views] def busInterfacePortMap(blackBoxPortBag: LazyPortViewBag, busInterface: DUH.BusInterface): LazyPortViewBag = {
 
     val getByNameOpt = busInterface.rtlView.portMaps match {
-      case DUH.FieldPortMaps(map) => Some(map.get(_: String))
-      case _ => None
+      case DUH.FieldPortMaps(map) => map.get(_: String)
+      case _ => throw new ViewException(s"bus interface has an array port map")
     }
 
-    val getByIndexOpt = (busInterface.rtlView.portMaps match {
-      case DUH.ArrayPortMaps(ports) => Some((ports.zipWithIndex.map { case (e, i) => i -> e }).toMap.get(_: Int))
-      case _ => None
-    })
-
-    def forceName(name: String): String =
-      getByNameOpt.getOrElse(throw new ViewException(s"bus interface has an array port map"))(name)
-        .getOrElse(throw new ViewException(s"no port map with key $name"))
-
-    def forceIndex(index: Int): String =
-        getByIndexOpt.getOrElse(throw new ViewException(s"bus interface has an object port map"))(index)
-          .getOrElse(throw new ViewException(s"index $index is out of bounds"))
-
-    new LazyPortViewBag(
-      requiredImp = name => blackBoxPortBag.required.selectDynamic(forceName(name)),
-      optionalImp = name => blackBoxPortBag.optional.selectDynamic(forceName(name))
-    )
+    new LazyPortViewBag {
+      val required = SelectBag { busName =>
+        val portName = getByNameOpt(busName).getOrElse(throw new ViewException(s"no port map with key $busName"))
+        blackBoxPortBag.required.selectDynamic(portName)
+      }
+      val optional = SelectBag { busName =>
+        getByNameOpt(busName).flatMap {
+          blackBoxPortBag.optional.selectDynamic(_)
+        }
+      }
+    }
   }
 
   def apply(
     bbParams: ParameterBag,
-    component: DUH.Component,
+    blackBoxPortBag: LazyPortViewBag,
     busInterface: DUH.BusInterface): LazyBusInterfaceView = {
-    val blackBoxPortBag = LazyPortViewBag(bbParams, component)
     new LazyBusInterfaceView {
       val busProperties = BusPropertyBag(bbParams, busInterface)
       val portMap = busInterfacePortMap(blackBoxPortBag, busInterface)
@@ -257,25 +268,19 @@ object LazyBusInterfaceView {
 }
 
 sealed trait ChiselPortView {
-  def data: Data
   def name: String
   def width: Int
   def direction: DUH.Direction
+  def data: Data
 }
 
 object ChiselPortView {
-  def apply(params: ParameterBag, port: DUH.Port): ChiselPortView = {
-    val lazyPortView = LazyPortView(params, port)
-    val place = () => chisel3.UInt(lazyPortView.width.W)
+  def apply(lazyPortView: LazyPortView): ChiselPortView = {
     new ChiselPortView {
-      val data = lazyPortView.direction match {
-        case DUH.Output => chisel3.Output(chisel3.UInt(lazyPortView.width.W))
-        case DUH.Input => chisel3.Input(chisel3.UInt(lazyPortView.width.W))
-        case DUH.Inout => chisel3.experimental.Analog(lazyPortView.width.W)
-      }
       val name = lazyPortView.name
-      val direction = lazyPortView.direction
       val width = lazyPortView.width
+      val direction = lazyPortView.direction
+      val data = lazyPortView.data
     }
   }
 }
@@ -283,34 +288,23 @@ object ChiselPortView {
 sealed trait ChiselPortBag {
   def required: SelectBag[ChiselPortView]
   def optional: SelectBag[Option[ChiselPortView]]
-  def blackbox: BlackBox
 }
 
-private case class DynamicIO(thunk: () => Seq[ChiselPortView]) extends Record {
-  val views = thunk()
-  val elements = ListMap(views.map(p => p.name -> p.data):_*)
+private class DynamicIO(thunk: () => Seq[(String, Data)]) extends Record {
+  val elements = ListMap(thunk():_*)
   override def cloneType: this.type = {
-    DynamicIO(thunk).asInstanceOf[this.type]
+    new DynamicIO(thunk).asInstanceOf[this.type]
   }
 }
 
 object ChiselPortBag {
-  def apply(pBag: ParameterBag, comp: DUH.Component): ChiselPortBag = {
-    var ports: Seq[ChiselPortView] = null
-    val bb = Module(new BlackBox {
-      val io = IO(DynamicIO(() => comp.ports.map(ChiselPortView(pBag, _))))
-      ports = io.views
-    })
-    val portMap = ports.map(p => p.name -> p).toMap
-
+  def apply(lazyBag: LazyPortViewBag): ChiselPortBag = {
     new ChiselPortBag {
-      val required = SelectBag({ name =>
-        portMap.get(name).getOrElse(throw new ViewException(s"no port named $name"))
-      })
-      val optional = SelectBag(portMap.get)
-      val blackbox = bb
+      val required = lazyBag.required.map(ChiselPortView(_))
+      val optional = lazyBag.optional.map(_.map(ChiselPortView(_)))
     }
   }
+
 }
 
 sealed trait ChiselBusInterfaceView {
@@ -319,40 +313,22 @@ sealed trait ChiselBusInterfaceView {
 }
 
 object ChiselBusInterfaceView {
-  private[views] def busInterfacePortMap(blackBoxPortBag: ChiselPortBag, busInterface: DUH.BusInterface): ChiselPortBag = {
-
-    val getByNameOpt = busInterface.rtlView.portMaps match {
-      case DUH.FieldPortMaps(map) => Some(map.get(_: String))
-      case _ => None
-    }
-
-    val getByIndexOpt = (busInterface.rtlView.portMaps match {
-      case DUH.ArrayPortMaps(ports) => Some((ports.zipWithIndex.map { case (e, i) => i -> e }).toMap.get(_: Int))
-      case _ => None
-    })
-
-    def forceName(name: String): String =
-      getByNameOpt.getOrElse(throw new ViewException(s"bus interface has an array port map"))(name)
-        .getOrElse(throw new ViewException(s"no port map with key $name"))
-
-    def forceIndex(index: Int): String =
-        getByIndexOpt.getOrElse(throw new ViewException(s"bus interface has an object port map"))(index)
-          .getOrElse(throw new ViewException(s"index $index is out of bounds"))
-
-    new ChiselPortBag {
-      val required = SelectBag(name => blackBoxPortBag.required.selectDynamic(forceName(name)))
-      val optional = SelectBag(name => blackBoxPortBag.optional.selectDynamic(forceName(name)))
-      val blackbox = blackBoxPortBag.blackbox
+  def apply(lazyView: LazyBusInterfaceView): ChiselBusInterfaceView = {
+    new ChiselBusInterfaceView {
+      val busProperties = lazyView.busProperties
+      val portMap = ChiselPortBag(lazyView.portMap)
     }
   }
+}
 
-  def apply(
-    bbParams: ParameterBag,
-    component: DUH.Component,
-    busInterface: DUH.BusInterface): ChiselBusInterfaceView = {
-    new ChiselBusInterfaceView {
-      val busProperties = BusPropertyBag(bbParams, busInterface)
-      val portMap = busInterfacePortMap(ChiselPortBag(bbParams, component), busInterface)
-    }
+sealed trait NodeBag {
+  def optional: SelectBag[Option[BaseNode]]
+  def required: SelectBag[BaseNode]
+}
+
+object NodeBag {
+  def apply(map: Map[String, BaseNode]): NodeBag = new NodeBag {
+    val required = SelectBag(map)
+    val optional = SelectBag(map.get)
   }
 }

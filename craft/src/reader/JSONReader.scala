@@ -6,6 +6,10 @@ import duh.{decoders => J}
 import chisel3._
 import org.json4s.jackson.JsonMethods.parse
 import duh.scala.{types => DUH}
+import duh.scala.implementation.AXI4BusImplementation
+import freechips.rocketchip.diplomacy.{LazyModule, SimpleLazyModule}
+import freechips.rocketchip.diplomacy.SimpleLazyModule
+import chipsalliance.rocketchip.config.Parameters
 
 object DUHScala extends App {
   if (args.length < 1) {
@@ -27,13 +31,12 @@ object DUHScala extends App {
       val parsed = parse(new File(duhDoc))
       val params = parse(new File(paramsJSON))
       val component = J.field("component", duh.scala.types.Component.fromJSON)(parsed)
-      println(component.map(comp => Driver.toFirrtl(Driver.elaborate(() => new Module {
-        val thunk = J.get(duh.scala.exporters.blackBox(params, comp))
-        duh.scala.implementation.AXI4BusImplementation.demo(params, comp)
-
-        val bbox = Module(thunk())
-        val io = IO(bbox.io.cloneType)
-        io <> bbox.io
+      println(component.map(comp => Driver.toFirrtl(Driver.elaborate(() => {
+        implicit val p = Parameters.empty
+        val lazyModule = LazyModule(new SimpleLazyModule {
+          LazyDUHWrapper(Seq(AXI4BusImplementation))(params, comp)
+        })
+        lazyModule.module
       })).serialize))
     case _ =>
       Console.err.println("Must provide exactly two arguments for params file path and DUH document file path")
