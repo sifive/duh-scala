@@ -27,7 +27,7 @@ case class AXI4BusImpExternalParams(
   canInterleave: Boolean)
 
 sealed trait LazyScopeInputs[T] {
-  def view: BusInterfaceView
+  def view: LazyBusInterfaceView
   def extParams: T
 }
 
@@ -42,7 +42,7 @@ object LazyScopeOutputs {
 }
 
 trait ChiselScopeInputs[ExternalParams, Sideband] {
-  def view: BusDefinitionView
+  def view: ChiselBusInterfaceView
   def extParams: ExternalParams
   def sideband: Sideband
 }
@@ -62,7 +62,7 @@ object ChiselScopeOutputs {
 }
 
 object Connect {
-  def applySlave(portBag: ChiselPortViewBag, outputs: ChiselScopeOutputs[_]): Unit = {
+  def applySlave(portBag: ChiselPortBag, outputs: ChiselScopeOutputs[_]): Unit = {
     val mapping = outputs.mapping
     mapping.map { case (portDef, data) =>
       portDef.onSlave
@@ -125,7 +125,7 @@ object AXI4BusImplementation extends BusImplementation {
   def demo(params: JValue, comp: Component): Unit = {
     println(
       placeLazyScope(new LazyScopeInputs[ExternalParams] {
-        val view = BusInterfaceView(ParameterBag(params), comp, comp.busInterfaces.head)
+        val view = LazyBusInterfaceView(ParameterBag(params), comp, comp.busInterfaces.head)
         val extParams = AXI4BusImpExternalParams(0x4000, Nil, false, true)
       }).sideband
     )

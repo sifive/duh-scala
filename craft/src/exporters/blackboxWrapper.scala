@@ -43,14 +43,6 @@ package object exporters {
     }
   }
 
-  def toChisel(param: DUH.ParameterDefinition, json: JValue): J.Result[Param] = {
-    param match {
-      case param: DUH.IntegerParameter => param.fromJSON(json).map(IntParam)
-      case param: DUH.DoubleParameter => param.fromJSON(json).map(DoubleParam)
-      case param: DUH.StringParameter => param.fromJSON(json).map(StringParam)
-    }
-  }
-
   def blackBox(json: JValue, comp: DUH.Component): J.Result[() => BlackBox] = {
     val params: J.Result[ListMap[String, Param]] = J.pass(ListMap.empty)
 

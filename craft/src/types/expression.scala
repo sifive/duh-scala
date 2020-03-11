@@ -9,8 +9,6 @@ import org.json4s.JsonAST._
 
 sealed trait Expression
 object Expression {
-  private def parseVal[T, _: P](str: => P[Unit], value: T) = str.map(_ => value)
-
   sealed trait Literal extends Expression
   case class IntLit(i: BigInt) extends Literal
   case class DecLit(i: BigDecimal) extends Literal
