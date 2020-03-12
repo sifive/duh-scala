@@ -113,7 +113,7 @@ object AXI4BusImplementation extends BusImplementation {
 
     bbBundle.AWVALID.data := nodeBundle.aw.valid
     nodeBundle.aw.ready := bbBundle.AWREADY.data
-    bbBundle.AWID.data := nodeBundle.aw.bits.id
+    bbBundleOpt.AWID.map(_.data := nodeBundle.aw.bits.id)
     bbBundle.AWADDR.data := nodeBundle.aw.bits.addr
     bbBundle.AWLEN.data := nodeBundle.aw.bits.len
     bbBundle.AWSIZE.data := nodeBundle.aw.bits.size
@@ -124,36 +124,36 @@ object AXI4BusImplementation extends BusImplementation {
     bbBundleOpt.AWQOS.map(_.data := nodeBundle.aw.bits.qos)
     bbBundleOpt.AWREGION.map(_.data := 0.U)
 
-    //bbBundle.WID.map(_.data := nodeBundle.w.bits.id)
+    // bbBundle.WID.map(_.data := nodeBundle.w.bits.id)
     bbBundle.WVALID.data := nodeBundle.w.valid
     nodeBundle.w.ready := bbBundle.WREADY.data
     bbBundle.WDATA.data := nodeBundle.w.bits.data
     bbBundle.WSTRB.data := nodeBundle.w.bits.strb
     bbBundleOpt.WLAST.map(_.data := nodeBundle.w.bits.last)
 
-    bbBundle.BVALID.data := nodeBundle.b.valid
-    nodeBundle.b.ready := bbBundle.BREADY.data
-    bbBundleOpt.BID.map(_.data := nodeBundle.b.bits.id)
-    bbBundleOpt.BRESP.map(_.data := nodeBundle.b.bits.resp)
+    nodeBundle.b.valid := bbBundle.BVALID.data
+    bbBundle.BREADY.data := nodeBundle.b.ready
+    nodeBundle.b.bits.id := bbBundleOpt.BID.map(_.data).getOrElse(0.U)
+    nodeBundle.b.bits.resp := bbBundleOpt.BRESP.map(_.data).getOrElse(0.U)
 
     bbBundle.ARVALID.data := nodeBundle.ar.valid
     nodeBundle.ar.ready := bbBundle.ARREADY.data
     bbBundleOpt.ARID.map(_.data := nodeBundle.ar.bits.id)
     bbBundle.ARADDR.data := nodeBundle.ar.bits.addr
     bbBundle.ARLEN.data := nodeBundle.ar.bits.len
-    bbBundle.ARSIZE.data := nodeBundle.ar.bits.size
-    bbBundle.ARBURST.data := nodeBundle.ar.bits.burst
+    bbBundleOpt.ARSIZE.map(_.data := nodeBundle.ar.bits.size)
+    bbBundleOpt.ARBURST.map(_.data := nodeBundle.ar.bits.burst)
     bbBundleOpt.ARLOCK.map(_.data := nodeBundle.ar.bits.lock)
     bbBundleOpt.ARPROT.map(_.data := nodeBundle.ar.bits.prot)
     bbBundleOpt.ARQOS.map(_.data := nodeBundle.ar.bits.qos)
     bbBundleOpt.ARREGION.map(_.data := 0.U)
 
-    bbBundle.RVALID.data := nodeBundle.r.valid
-    nodeBundle.r.ready := bbBundle.RREADY.data
-    bbBundleOpt.RID.map(_.data := nodeBundle.r.bits.id)
-    bbBundle.RDATA.data := nodeBundle.r.bits.data
-    bbBundleOpt.RRESP.map(_.data := nodeBundle.r.bits.resp)
-    bbBundle.RLAST.data := nodeBundle.r.bits.last
+    nodeBundle.r.valid := bbBundle.RVALID.data
+    bbBundle.RREADY.data := nodeBundle.r.ready
+    nodeBundle.r.bits.id := bbBundleOpt.RID.map(_.data).getOrElse(0.U)
+    nodeBundle.r.bits.data := bbBundle.RDATA.data
+    nodeBundle.r.bits.resp := bbBundleOpt.RRESP.map(_.data).getOrElse(0.U)
+    nodeBundle.r.bits.last := bbBundle.RLAST.data
   }
 
   private[duh] def place(eParamsJSON: JValue, lazyView: LazyBusInterfaceView) = {

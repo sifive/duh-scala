@@ -1,6 +1,6 @@
 package duh.scala.views
 
-import chisel3.{Module, BlackBox, Data, Record, fromIntToWidth}
+import chisel3.{Module, BlackBox, Data, Record, fromIntToWidth, UInt}
 
 import scala.collection.immutable.ListMap
 import duh.scala.{types => DUH}
@@ -10,21 +10,25 @@ import scala.language.higherKinds
 import duh.{decoders => J}
 
 import scala.collection.immutable.ListMap
-import freechips.rocketchip.diplomacy.BaseNode
+import freechips.rocketchip.diplomacy.{BaseNode, InModuleBody}
 
 sealed trait LazyPortView {
   def name: String
   def width: Int
   def direction: DUH.Direction
-  private[views] lazy val data = direction match {
-    case DUH.Output => chisel3.Output(chisel3.UInt(width.W))
-    case DUH.Input => chisel3.Input(chisel3.UInt(width.W))
-    case DUH.Inout => chisel3.experimental.Analog(width.W)
-  }
+  private[views] def data:Data
 }
 
 object LazyPortView {
-  def apply(params: ParameterBag, port: DUH.Port): LazyPortView = {
+  private[views] def toChiselType(view: LazyPortView): Data = {
+    view.direction match {
+      case DUH.Output => chisel3.Output(UInt(view.width.W))
+      case DUH.Input => chisel3.Input(UInt(view.width.W))
+      case DUH.Inout => chisel3.experimental.Analog(view.width.W)
+    }
+  }
+
+  private[views] def apply(params: ParameterBag, port: DUH.Port, datax: => Data): LazyPortView = {
     var rawWidth = params.evaluate[BigInt](port.wire.width)
     var widthx = rawWidth match {
       case width if width < Int.MaxValue => width.toInt
@@ -45,6 +49,7 @@ object LazyPortView {
       val name = port.name
       val width = widthx
       val direction = directionx
+      lazy val data = datax
     }
   }
 }
@@ -211,21 +216,29 @@ object SelectBag {
 sealed trait LazyPortViewBag {
   def required: SelectBag[LazyPortView]
   def optional: SelectBag[Option[LazyPortView]]
+  private[views] def blackbox: BlackBox
 }
 
 object LazyPortViewBag {
   def apply(blackBoxParams: ParameterBag, comp: DUH.Component): LazyPortViewBag = {
     new LazyPortViewBag {
-      val portSeq = comp.ports.map(port => port.name -> LazyPortView(blackBoxParams, port))
+      val portSeq: Seq[(String, LazyPortView)] = comp.ports.map { port =>
+        port.name -> LazyPortView(blackBoxParams, port, blackbox.io.elements(port.name))
+      }
       val portMap = portSeq.toMap
       val optional = SelectBag(portMap.get)
 
       val required = SelectBag(name =>
         portMap.get(name).getOrElse(throw new ViewException(s"no port named $name")))
 
-      lazy val blackbox =  Module(new BlackBox {
-        val io = IO(new DynamicIO(() => portSeq.map { case (k, v) => k -> v.data }))
-      })
+      val wrappedValue = InModuleBody {
+        Module(new BlackBox {
+          val io = IO(new DynamicIO(() => portSeq.map { case (k, v) => k -> LazyPortView.toChiselType(v) }))
+          override def desiredName = comp.name
+        })
+      }
+
+      lazy val blackbox = wrappedValue.getWrappedValue
     }
   }
 }
@@ -253,6 +266,7 @@ object LazyBusInterfaceView {
           blackBoxPortBag.optional.selectDynamic(_)
         }
       }
+      def blackbox: BlackBox = blackBoxPortBag.blackbox
     }
   }
 
@@ -299,6 +313,7 @@ private class DynamicIO(thunk: () => Seq[(String, Data)]) extends Record {
 
 object ChiselPortBag {
   def apply(lazyBag: LazyPortViewBag): ChiselPortBag = {
+    lazyBag.blackbox // force chisel elaborate
     new ChiselPortBag {
       val required = lazyBag.required.map(ChiselPortView(_))
       val optional = lazyBag.optional.map(_.map(ChiselPortView(_)))
@@ -327,8 +342,5 @@ sealed trait NodeBag {
 }
 
 object NodeBag {
-  def apply(map: Map[String, BaseNode]): NodeBag = new NodeBag {
-    val required = SelectBag(map)
-    val optional = SelectBag(map.get)
-  }
+  def apply(map: Map[String, BaseNode]): SelectBag[BaseNode] = SelectBag(map)
 }

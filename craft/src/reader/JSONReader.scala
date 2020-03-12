@@ -7,9 +7,29 @@ import chisel3._
 import org.json4s.jackson.JsonMethods.parse
 import duh.scala.{types => DUH}
 import duh.scala.implementation.AXI4BusImplementation
-import freechips.rocketchip.diplomacy.{LazyModule, SimpleLazyModule}
-import freechips.rocketchip.diplomacy.SimpleLazyModule
+import freechips.rocketchip.amba.axi4.{AXI4SlaveNode, AXI4MasterParameters, AXI4MasterPortParameters, AXI4SlavePortParameters, AXI4Imp}
+import freechips.rocketchip.diplomacy.{LazyModule, SimpleLazyModule, LazyModuleImp}
+import freechips.rocketchip.diplomacy.{SimpleLazyModule, ValName, NexusNode}
 import chipsalliance.rocketchip.config.Parameters
+
+sealed abstract class AXI4TesterNode(
+  masterFn: Seq[AXI4MasterPortParameters] => AXI4MasterPortParameters,
+  slaveFn: Seq[AXI4SlavePortParameters] => AXI4SlavePortParameters)(implicit valName: ValName) extends NexusNode(AXI4Imp)(masterFn, slaveFn, false, false)
+
+object AXI4TesterNode {
+  def testerMasterFn: Seq[AXI4MasterPortParameters] => AXI4MasterPortParameters =
+    _ => AXI4MasterPortParameters(
+      masters = Seq(AXI4MasterParameters("tester")),
+      opaqueBits = 0,
+      userBits = 0)
+  def testerSlaveFn: Seq[AXI4SlavePortParameters] => AXI4SlavePortParameters = _.head
+  def apply(
+    masterFn: Seq[AXI4MasterPortParameters] => AXI4MasterPortParameters = testerMasterFn,
+    slaveFn: Seq[AXI4SlavePortParameters] => AXI4SlavePortParameters = testerSlaveFn)
+  (implicit valName: ValName = ValName("AXI4TesterNode")) =
+    new AXI4TesterNode(masterFn, slaveFn) {
+    }
+}
 
 object DUHScala extends App {
   if (args.length < 1) {
@@ -34,7 +54,8 @@ object DUHScala extends App {
       println(component.map(comp => Driver.toFirrtl(Driver.elaborate(() => {
         implicit val p = Parameters.empty
         val lazyModule = LazyModule(new SimpleLazyModule {
-          LazyDUHWrapper(Seq(AXI4BusImplementation))(params, comp)
+          val wrapper = LazyDUHWrapper(Seq(AXI4BusImplementation))(params, comp)
+          wrapper.nodes.ctrl.asInstanceOf[AXI4SlaveNode] := AXI4TesterNode()
         })
         lazyModule.module
       })).serialize))
