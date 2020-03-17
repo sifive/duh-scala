@@ -2,14 +2,15 @@
   "json-decoders": {
     "scalaVersion": "2.12.8",
     "dependencies": [
-      "org.json4s::json4s-jackson:3.6.1",
-      "com.lihaoyi::fastparse:2.2.2"
+      "com.lihaoyi::upickle:1.0.0"
     ]
   },
   "duh-scala": {
     "scalaVersion": "2.12.8",
     "dependencies": [
-      "org.json4s::json4s-jackson:3.6.1"
+      "com.lihaoyi::fastparse:2.2.2",
+      "com.lihaoyi::upickle:1.0.0",
+      "com.lihaoyi::ujson-json4s:1.0.0"
     ]
   }
 }

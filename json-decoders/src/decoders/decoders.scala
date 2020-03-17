@@ -1,10 +1,10 @@
 // See LICENSE for license details.
 package duh
 
-import org.json4s.JsonAST._
 import scala.reflect.macros.whitebox
 import scala.language.experimental.macros
 import scala.language.dynamics
+import duh.json._
 
 package object decoders {
   sealed trait Error {
@@ -134,7 +134,7 @@ package object decoders {
   }
 
   def arrMap[T](fn: Decoder[T]): Decoder[Seq[T]] = {
-    case JArray(elements) =>
+    case JArray(_, elements) =>
       val (passes: Seq[Result[T]], fails: Seq[Result[T]]) =
         elements.zipWithIndex.map({ case (value, index) =>
           fn(value).swap.map(Error.Index(index, _)).swap
@@ -149,7 +149,7 @@ package object decoders {
   }
 
   def arrFind[T](cond: JValue => Boolean, nextDecoder: Decoder[T]): Decoder[T] = {
-    case JArray(elements) =>
+    case JArray(_, elements) =>
       elements.find(cond) match {
         case Some(found) => nextDecoder(found)
         case None => fail(s"no match found")
@@ -158,7 +158,7 @@ package object decoders {
   }
 
   def arrFindOpt[T](cond: JValue => Boolean, nextDecoder: Decoder[T]): Decoder[Option[T]] = {
-    case JArray(elements) =>
+    case JArray(_, elements) =>
       elements.find(cond) match {
         case Some(found) => nextDecoder(found).map(Some(_))
         case None => pass(None)
@@ -167,7 +167,7 @@ package object decoders {
   }
 
   def objMap[T](fn: (String, JValue) => Result[T]): Decoder[Seq[T]] = {
-    case JObject(fields) =>
+    case JObject(_, fields) =>
       val (passes: Seq[Result[T]], fails: Seq[Result[T]]) = fields.map({ case (field, value) =>
         fn(field, value).swap.map(Error.Field(field, _)).swap
       }).partition(_.isRight)
@@ -181,18 +181,17 @@ package object decoders {
   }
 
   def field[T](name: String, nextDecoder: Decoder[T]): Decoder[T] = {
-    case JObject(fields) => fields.filter(_._1 == name) match {
-      case List((_, selected)) =>
+    case JObject(_, fields) => fields.get(name) match {
+      case Some(selected) =>
         nextDecoder(selected).swap.map(Error.Field(name, _)).swap
-      case List() => fail(s"missing field '$name'")
-      case _ => fail (s"more than one fields named '$name'")
+      case None => fail(s"missing field '$name'")
     }
     case _ => fail(s"not a JObject")
   }
 
   def fieldOption[T](name: String, someDecoder: Decoder[T]): Decoder[Option[T]] = {
-    case JObject(fields) => fields.find(_._1 == name) match {
-      case Some((_, selected)) =>
+    case JObject(_, fields) => fields.get(name) match {
+      case Some(selected) =>
         someDecoder(selected).map(value => Some(value)).swap.map(Error.Field(name, _)).swap
       case None => pass(None)
     }
@@ -200,7 +199,7 @@ package object decoders {
   }
 
   def index[T](idx: Int, nextDecoder: Decoder[T]): Decoder[T] = {
-    case JArray(elements) => elements.lift(idx) match {
+    case JArray(_, elements) => elements.lift(idx) match {
       case Some(selected) =>
         nextDecoder(selected).swap.map(Error.Index(idx, _)).swap
       case None => fail(s"index $idx is out of bounds")
@@ -215,7 +214,7 @@ package object decoders {
     }))(json)
 
   def string[T](fn: String => Result[T]): Decoder[T] = {
-    case JString(str) => fn(str)
+    case JString(_, str) => fn(str)
     case _ => fail("not a JString")
   }
 
@@ -223,23 +222,21 @@ package object decoders {
 
 
   def integer[T](fn: BigInt => Result[T]): Decoder[T] = {
-    case JInt(num) => fn(num)
-    case JLong(num) => fn(BigInt(num))
-    case _ => fail("not a JInt or JLong")
+    case JInteger(_, num) => fn(num)
+    case _ => fail("not a JInteger")
   }
 
   val integer: Decoder[BigInt] = integer(pass(_: BigInt))
 
   def decimal[T](fn: BigDecimal => Result[T]): Decoder[T] = {
-    case JDecimal(num) => fn(num)
-    case JDouble(num) => fn(BigDecimal(num))
-    case _ => fail("not a JDecimal or JDouble")
+    case JDecimal(_, num) => fn(num)
+    case _ => fail("not a JDecimal")
   }
 
   val decimal: Decoder[BigDecimal] = decimal(pass(_: BigDecimal))
 
   def boolean[T](fn: Boolean => Result[T]): Decoder[T] = {
-    case JBool(bool) => fn(bool)
+    case JBoolean(_, bool) => fn(bool)
     case _ => fail("not a JBool")
   }
 

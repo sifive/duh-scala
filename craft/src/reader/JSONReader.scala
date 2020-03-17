@@ -4,34 +4,37 @@ package duh.scala
 import java.io.File
 import duh.{decoders => J}
 import chisel3._
-import org.json4s.jackson.JsonMethods.parse
 import duh.scala.{types => DUH}
 import duh.scala.implementation.AXI4BusImplementation
-import freechips.rocketchip.amba.axi4.{AXI4SlaveNode, AXI4MasterParameters, AXI4MasterPortParameters, AXI4SlavePortParameters, AXI4Imp}
+import freechips.rocketchip.amba.axi4._
 import freechips.rocketchip.diplomacy.{LazyModule, SimpleLazyModule, LazyModuleImp}
-import freechips.rocketchip.diplomacy.{SimpleLazyModule, ValName, NexusNode}
+import freechips.rocketchip.diplomacy.{SimpleLazyModule, ValName, NexusNode, NodeImp}
 import chipsalliance.rocketchip.config.Parameters
 
-sealed abstract class AXI4TesterNode(
-  masterFn: Seq[AXI4MasterPortParameters] => AXI4MasterPortParameters,
-  slaveFn: Seq[AXI4SlavePortParameters] => AXI4SlavePortParameters)(implicit valName: ValName) extends NexusNode(AXI4Imp)(masterFn, slaveFn, false, false)
+import upickle.default
 
-object AXI4TesterNode {
-  def testerMasterFn: Seq[AXI4MasterPortParameters] => AXI4MasterPortParameters =
-    _ => AXI4MasterPortParameters(
-      masters = Seq(AXI4MasterParameters("tester")),
-      opaqueBits = 0,
-      userBits = 0)
-  def testerSlaveFn: Seq[AXI4SlavePortParameters] => AXI4SlavePortParameters = _.head
-  def apply(
-    masterFn: Seq[AXI4MasterPortParameters] => AXI4MasterPortParameters = testerMasterFn,
-    slaveFn: Seq[AXI4SlavePortParameters] => AXI4SlavePortParameters = testerSlaveFn)
-  (implicit valName: ValName = ValName("AXI4TesterNode")) =
-    new AXI4TesterNode(masterFn, slaveFn) {
-    }
+object TesterNode {
+  def apply[SourceParams, SinkParams, EdgeOut, EdgeIn, Bundle <: Data](
+    imp: NodeImp[SourceParams, SinkParams, EdgeOut, EdgeIn, Bundle],
+    defaultSourceParams: Option[SourceParams] = None,
+    defaultSinkParams: Option[SinkParams] = None): NexusNode[SourceParams, SinkParams, EdgeOut, EdgeIn, Bundle] =
+  new NexusNode(imp)(
+    dFn = s => defaultSourceParams.getOrElse(s.headOption.getOrElse(
+      throw new Exception("no source nodes connected"))),
+    uFn = s => defaultSinkParams.getOrElse(s.headOption.getOrElse(
+      throw new Exception("no sink nodes connected"))),
+    inputRequiresOutput = false,
+    outputRequiresInput = false)(
+      ValName(imp.getClass.getSimpleName + "TesterNode"))
+
+  def axi4(): NexusNode[AXI4MasterPortParameters, AXI4SlavePortParameters, AXI4EdgeParameters, AXI4EdgeParameters, AXI4Bundle] =
+    apply(AXI4Imp,
+      Some(AXI4MasterPortParameters(Seq(AXI4MasterParameters("TestAXI4MasterParams")))))
 }
 
 object DUHScala extends App {
+  val parse = duh.json.Parser.parse(_)
+
   if (args.length < 1) {
     Console.err.println("need at least one argument [bus|component]")
     System.exit(1)
@@ -55,7 +58,7 @@ object DUHScala extends App {
         implicit val p = Parameters.empty
         val lazyModule = LazyModule(new SimpleLazyModule {
           val wrapper = LazyDUHWrapper(Seq(AXI4BusImplementation))(params, comp)
-          wrapper.nodes.ctrl.asInstanceOf[AXI4SlaveNode] := AXI4TesterNode()
+          wrapper.nodes.ctrl.asInstanceOf[AXI4SlaveNode] := TesterNode.axi4()
         })
         lazyModule.module
       })).serialize))

@@ -5,7 +5,7 @@ import fastparse.Parsed.{Success, Failure}
 import SingleLineWhitespace._
 
 import duh.{decoders => J}
-import org.json4s.JsonAST._
+import duh.json._
 
 sealed trait Expression
 object Expression {

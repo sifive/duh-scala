@@ -1,12 +1,12 @@
 package duh.scala.implementation
 
 import duh.{decoders => J}
+import duh.json._
 import chisel3.{Data, fromIntToLiteral}
 import scala.collection.immutable.ListMap
 import freechips.rocketchip.diplomacy.{BundleBridgeSource, TransferSizes, AddressSet, Resource}
 import freechips.rocketchip.amba.axi4.{AXI4SlaveNode, AXI4MasterNode, AXI4SlavePortParameters, AXI4SlaveParameters}
 import duh.scala.views._
-import org.json4s.JsonAST._
 import duh.scala.types._
 import freechips.rocketchip.diplomacy.{SimpleLazyModule, LazyModule, InModuleBody, BaseNode}
 import chipsalliance.rocketchip.config.Parameters
@@ -62,7 +62,7 @@ object AXI4BusImplementation extends BusImplementation {
 
   val mode = Sink
   val busDefinition = { // FIXME
-    val parsed = org.json4s.jackson.JsonMethods.parse(new java.io.File("duh-scala/example-bus-spec.json"))
+    val parsed = Parser.parse(new java.io.File("duh-scala/example-bus-spec.json"))
     val component = BusDefinition.fromJSON(parsed)
     component.getOrElse(throw new Exception("SLKDJFLKSDJKLFJ"))
   }

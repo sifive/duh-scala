@@ -1,7 +1,7 @@
 package duh.scala.types
 
 import duh.{decoders => J}
-import org.json4s.JsonAST._
+import duh.json._
 import scala.collection.immutable.ListMap
 import scala.util.matching.Regex
 
@@ -162,8 +162,10 @@ object BusRTLView {
   val fromJSON: J.Decoder[BusRTLView] = {
     J.jMapNamed[BusRTLViewImp](
       portMaps = J.field("portMaps", PortMaps.fromJSON),
-      properties = J.fieldOption("props", J.pass)(_)
-        .map(_.getOrElse(JObject(List.empty))),
+      // this case is factored weird because of macro bug https://github.com/scala/bug/issues/11628
+      properties = J.pass(_).flatMap(json =>
+        J.fieldOption("props", J.pass)(json)
+          .map(_.getOrElse(JObject(json.index, Map.empty)))),
     )
   }
 }
