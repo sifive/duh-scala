@@ -1,12 +1,13 @@
 package duh
 
 package object json5 {
+
+  import ujson.Arr
   def parse(file: String): JValue = {
     val source = io.Source.fromFile(file)
     new Parser(source.toArray).parse(Visitor())
   }
 
-  import ujson.Arr
   import scala.annotation.{switch, tailrec}
   import java.lang.Character
 
@@ -101,6 +102,7 @@ package object json5 {
 
     def parse[Context, T](visitor: Visitor[Context, T]): T = {
       val value = rparse(TOP_VALUE, visitor, List.empty)
+      println(value)
       lexer.lex()
       if (lexer.token != EOF) {
         error(s"unexpected ${tokenName(lexer.token)}, expected ${tokenName(EOF)}")
@@ -129,56 +131,69 @@ package object json5 {
       @inline implicit def castToArrVisitor(v: BaseVisitor[Context, T]) = v.asInstanceOf[ArrVisitor]
       @inline implicit def castToValVisitor(v: BaseVisitor[Context, T]) = v.asInstanceOf[ValVisitor]
 
+      println(s"${parserStateName(state)} ${stack.length}")
       lexer.lex()
-      println(tokenName(lexer.token))
+      //println(tokenName(lexer.token))
       val token = lexer.token
       val context: Context = visitor.getContext(lexer)
       (token: @switch) match {
-        case EOF => error(EOF, state)
+        case EOF =>
+          println(stack)
+          error(EOF, state)
         case IDENTIFIER =>
-          if (literalIdentifiers(lexer.strVal)) {
-            val value = lexer.strVal match {
-              case "false" => (visitor: ValVisitor).visitFalse(context)
-              case "true" => (visitor: ValVisitor).visitTrue(context)
-              case "NaN" => (visitor: ValVisitor).visitNaN(context, false)
-              case "Infinity" => (visitor: ValVisitor).visitInfinity(context, false)
-              case "null" => (visitor: ValVisitor).visitNull(context)
-            }
-            (state: @switch) match {
-              case TOP_VALUE =>
-                if (stack.nonEmpty) { error("impossible") }
-                value
-              case ARRAY_ELEMENT =>
-                if (stack.isEmpty) { error("impossible") }
-                (stack.head: ArrVisitor).visitElement(value)
-                rparse(ARRAY_COMMA, stack.head, stack.tail)
-              case OBJECT_VALUE =>
-                if (stack.isEmpty) { error("impossible") }
-                (stack.head: ObjVisitor).visitValue(value)
-                rparse(OBJECT_COMMA, stack.head, stack.tail)
-              case _ =>
-                error(token, state)
-            }
-          } else {
-            (state: @switch) match {
-              case OBJECT_KEY =>
-                if (reservedIdentifiers(lexer.strVal)) {
-                  error(s"cannot use reserved identifier '${lexer.strVal}' as unquoted object key")
-                } else {
-                  (visitor: ObjVisitor).visitKey(context, lexer.strVal)
-                  rparse(OBJECT_COLON, visitor, stack)
+          (state: @switch) match {
+            case OBJECT_KEY =>
+              (visitor: ObjVisitor).visitKey(context, lexer.strVal)
+              rparse(OBJECT_COLON, visitor, stack)
+            case TOP_VALUE | ARRAY_ELEMENT | OBJECT_VALUE =>
+              if (literalIdentifiers(lexer.strVal)) {
+                val valVisitor = visitor match {
+                  case v: ValVisitor => v
+                  case v: ObjVisitor => v.valueVisitor()
+                  case v: ArrVisitor => v.elementVisitor()
                 }
-              case _ =>
+                val value = lexer.strVal match {
+                  case "false" => valVisitor.visitFalse(context)
+                  case "true" => valVisitor.visitTrue(context)
+                  case "NaN" => valVisitor.visitNaN(context, false)
+                  case "Infinity" => valVisitor.visitInfinity(context, false)
+                  case "null" => valVisitor.visitNull(context)
+                }
+                (state: @switch) match {
+                  case TOP_VALUE =>
+                    if (stack.nonEmpty) { error("impossible") }
+                    value
+                  case ARRAY_ELEMENT =>
+                    //if (stack.isEmpty) { error("impossible") }
+                    //(stack.head: ArrVisitor).visitElement(value)
+                    //rparse(ARRAY_COMMA, stack.head, stack.tail)
+                    (visitor: ArrVisitor).visitElement(value)
+                    rparse(ARRAY_COMMA, visitor, stack)
+                  case OBJECT_VALUE =>
+                    //if (stack.isEmpty) { error("impossible") }
+                    //(stack.head: ObjVisitor).visitValue(value)
+                    //rparse(OBJECT_COMMA, stack.head, stack.tail)
+                    (visitor: ObjVisitor).visitValue(value)
+                    rparse(OBJECT_COMMA, visitor, stack)
+                  case _ =>
+                    error(token, state)
+                }
+              } else {
                 error(token, state)
-            }
+              }
+            case _ =>
+              error(token, state)
           }
         case LEFT_BRACKET =>
           (state: @switch) match {
             case TOP_VALUE =>
               val subVisitor = (visitor: ValVisitor).arrayVisitor(context)
               rparse(ARRAY_ELEMENT, subVisitor, stack)
-            case OBJECT_VALUE | ARRAY_ELEMENT =>
-              val subVisitor = (visitor: ValVisitor).arrayVisitor(context)
+            case OBJECT_VALUE =>
+              val subVisitor = (visitor: ObjVisitor).valueVisitor().arrayVisitor(context)
+              rparse(ARRAY_ELEMENT, subVisitor, visitor +: stack)
+            case ARRAY_ELEMENT =>
+              val subVisitor = (visitor: ArrVisitor).elementVisitor().arrayVisitor(context)
               rparse(ARRAY_ELEMENT, subVisitor, visitor +: stack)
             case _ =>
               error(token, state)
@@ -188,8 +203,11 @@ package object json5 {
             case TOP_VALUE =>
               val subVisitor = (visitor: ValVisitor).objectVisitor(context)
               rparse(OBJECT_KEY, subVisitor, stack)
-            case OBJECT_VALUE | ARRAY_ELEMENT =>
-              val subVisitor = (visitor: ValVisitor).objectVisitor(context)
+            case OBJECT_VALUE =>
+              val subVisitor = (visitor: ObjVisitor).valueVisitor().objectVisitor(context)
+              rparse(OBJECT_KEY, subVisitor, visitor +: stack)
+            case ARRAY_ELEMENT =>
+              val subVisitor = (visitor: ArrVisitor).elementVisitor().objectVisitor(context)
               rparse(OBJECT_KEY, subVisitor, visitor +: stack)
             case _ =>
               error(token, state)
@@ -243,7 +261,7 @@ package object json5 {
           }
         case COLON => 
           if (state == OBJECT_COLON) {
-            rparse(OBJECT_VALUE, visitor.valueVisitor(context), visitor +: stack)
+            rparse(OBJECT_VALUE, visitor, stack)
           } else {
             error(token, state)
           }
@@ -257,29 +275,33 @@ package object json5 {
                 error(token, state)
             }
           } else {
+            val valVisitor = visitor match {
+              case v: ValVisitor => v
+              case v: ObjVisitor => v.valueVisitor()
+              case v: ArrVisitor => v.elementVisitor()
+            }
             val value = (token: @switch) match {
-              case NAN => (visitor: ValVisitor).visitNaN(context, lexer.strVal.head == '-')
-              case INFINITY => (visitor: ValVisitor).visitInfinity(context, lexer.strVal.head == '-')
+              case NAN => valVisitor.visitNaN(context, lexer.strVal.head == '-')
+              case INFINITY => valVisitor.visitInfinity(context, lexer.strVal.head == '-')
               case NUMBER =>
                 if (lexer.numberDotIndex() >= 0) {
-                  (visitor: ValVisitor).visitInteger(context, lexer.numberBase, lexer.strVal)
+                  valVisitor.visitInteger(context, lexer.numberBase, lexer.strVal)
                 } else {
-                  (visitor: ValVisitor).visitFloat(context, lexer.numberDotIndex(), lexer.strVal)
+                  valVisitor.visitFloat(context, lexer.numberDotIndex(), lexer.strVal)
                 }
-              case STRING => (visitor: ValVisitor).visitString(context, lexer.strVal)
+              case STRING => valVisitor.visitString(context, lexer.strVal)
             }
 
             (state: @switch) match {
               case TOP_VALUE =>
                 if (stack.nonEmpty) { error("impossible") }
                 value
-              case OBJECT_VALUE | ARRAY_ELEMENT =>
-                if (stack.isEmpty) { error("impossible") }
-                val nextState = stack.head match {
-                  case _: ArrayVisitor[_, _] => ARRAY_COMMA
-                  case _: ObjectVisitor[_, _] => OBJECT_COMMA
-                }
-                rparse(nextState, stack.head, stack.tail)
+              case OBJECT_VALUE =>
+                (visitor: ObjVisitor).visitValue(value)
+                rparse(OBJECT_COMMA, visitor, stack)
+              case ARRAY_ELEMENT =>
+                (visitor: ArrVisitor).visitElement(value)
+                rparse(ARRAY_COMMA, visitor, stack)
               case _ =>
                 error(token, state)
             }
@@ -352,7 +374,7 @@ package object json5 {
 
     @inline
     private def putChar(c: Char): Unit = {
-      println(s"put: $c")
+      //println(s"put: $c")
       buffer.append(c)
     }
 
@@ -426,6 +448,7 @@ package object json5 {
         case '-' | '+' =>
           putChar(ch)
           nextChar()
+        case _ =>
       }
       numberBase = 10
       numberDotPosition = -1
@@ -456,6 +479,9 @@ package object json5 {
               } else {
                 error("expected digit")
               }
+            case _ =>
+              setStrVal()
+              token = NUMBER
           }
         case '.' =>
           putChar(ch)
@@ -768,7 +794,7 @@ package object json5 {
 
     @tailrec
     final def lex(): Unit = {
-      println(s"LEX $ch")
+      //println(s"LEX $ch")
       startOffset = position
       (ch: @switch) match {
         case '\t'

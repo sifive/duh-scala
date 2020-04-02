@@ -25,14 +25,14 @@ trait Visitor[Context, T] extends BaseVisitor[Context, T] {
 sealed trait SubVisitor[Context, T] extends BaseVisitor[Context, T]
 
 trait ArrayVisitor[Context, T] extends SubVisitor[Context, T] {
-  def elementVisitor(ctx: Context): Visitor[Context, T]
+  def elementVisitor(): Visitor[Context, T]
 
   def visitElement(elem: T): Unit
   def end(ctx: Context): T
 }
 
 trait ObjectVisitor[Context, T] extends SubVisitor[Context, T] {
-  def valueVisitor(ctx: Context): Visitor[Context, T]
+  def valueVisitor(): Visitor[Context, T]
 
   def visitKey(ctx: Context, key: String): Unit
   def visitValue(value: T): Unit
@@ -76,7 +76,7 @@ object Visitor {
         private var currentKey: String = null
         def getContext(lexer: Lexer) = lexer.startOffset
 
-        def valueVisitor(ctx: Context) = Visitor()
+        def valueVisitor() = Visitor()
 
         def visitKey(ctx: Context, key: String): Unit = {
           currentKey = key
@@ -95,7 +95,7 @@ object Visitor {
         private val buffer = mutable.Buffer.empty[JValue]
         def getContext(lexer: Lexer) = lexer.startOffset
 
-        def elementVisitor(ctx: Context) = Visitor()
+        def elementVisitor() = Visitor()
         def visitElement(element: JValue) = {
           buffer.append(element)
         }
