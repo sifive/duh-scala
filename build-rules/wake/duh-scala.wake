@@ -31,6 +31,23 @@ global def asdf Unit =
 global def lkj Unit =
   duhExportBus "{duhScalaRoot}/example-bus-spec.json"
 
+global def parseJSON5 file =
+  def jars = scalaModuleClasspath jsonDecodersScalaModule
+  def classpath =
+    jars
+    | map getPathName
+    | catWith ":"
+  def cmdline =
+    "java",
+    "-cp", classpath,
+    "duh.json5.Test",
+    file.simplify,
+    Nil
+  def inputs = makeStatePath file, jars
+  makePlan cmdline inputs
+  | setPlanKeep False
+  | runJob
+
 global def duhExportScala paramsFile jsonFile visible =
   def jars = scalaModuleClasspath duhScalaScalaModule
   def classpath =
