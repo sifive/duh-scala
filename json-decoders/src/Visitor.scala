@@ -1,6 +1,7 @@
 package duh.json5
 
 import scala.collection.mutable
+import scala.collection.immutable.ListMap
 
 sealed trait BaseVisitor[Context, T] {
   def getContext(lexer: Lexer): Context
@@ -42,7 +43,7 @@ trait ObjectVisitor[Context, T] extends SubVisitor[Context, T] {
 object Visitor {
   type Context = Int
   def apply(): Visitor[Context, JValue] = new Visitor[Context, JValue] {
-    def getContext(lexer: Lexer) = lexer.startOffset
+    def getContext(lexer: Lexer) = lexer.getStartOffset
 
     def visitNull(ctx: Context): JNull = JNull(ctx)
     def visitTrue(ctx: Context): JBoolean = JBoolean(ctx, true)
@@ -65,7 +66,7 @@ object Visitor {
 
     def visitString(ctx: Context, string: String): JString = JString(ctx, string)
     def visitInteger(ctx: Context, base: Int, number: String): JInteger =
-      JInteger(ctx, BigInt(number))
+      JInteger(ctx, BigInt(number, base))
     def visitFloat(ctx: Context, dotIndex: Int, number: String): JDouble =
       JDouble(ctx, number.toDouble)
 
@@ -74,7 +75,7 @@ object Visitor {
         private val startContext: Context = ctx
         private val buffer = mutable.Buffer.empty[(String, JValue)]
         private var currentKey: String = null
-        def getContext(lexer: Lexer) = lexer.startOffset
+        def getContext(lexer: Lexer) = lexer.getStartOffset
 
         def valueVisitor() = Visitor()
 
@@ -85,7 +86,7 @@ object Visitor {
           buffer.append(currentKey -> value)
         }
         def end(ctx: Context): JValue = {
-          JObject(startContext, Map(buffer: _*))
+          JObject(startContext, ListMap(buffer: _*))
         }
       }
 
@@ -93,7 +94,7 @@ object Visitor {
       new ArrayVisitor[Context, JValue] {
         private val startContext: Context = ctx
         private val buffer = mutable.Buffer.empty[JValue]
-        def getContext(lexer: Lexer) = lexer.startOffset
+        def getContext(lexer: Lexer) = lexer.getStartOffset
 
         def elementVisitor() = Visitor()
         def visitElement(element: JValue) = {

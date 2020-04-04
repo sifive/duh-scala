@@ -2,83 +2,66 @@ package duh
 
 package object json5 {
 
-  import ujson.Arr
   def parse(file: String): JValue = {
     val source = io.Source.fromFile(file)
     new Parser(source.toArray).parse(Visitor())
   }
 
   import scala.annotation.{switch, tailrec}
-  import java.lang.Character
 
   private type Token = Int
-  private var maxToken: Int = 0
-  private var tokenInit: () => Unit = () => Unit
-  private lazy val tokenName = new Array[String](maxToken)
-  private def registerToken(name: String): Token = {
-    val token = maxToken
-    val currTokenInit = tokenInit
-    val newTokenInit = () => {
-      currTokenInit()
-      assert(tokenName(token) == null)
-      tokenName(token) = name
-    }
-    tokenInit = newTokenInit
-    maxToken += 1
-    token
+
+  private var maxToken: Token = 13
+  private val tokenName = new Array[String](maxToken)
+  private def registerToken(token: Token, name: String): Unit = {
+    assert(tokenName(token) == null)
+    tokenName(token) = name
   }
 
-  private val EOF = registerToken("eof")
+  private final val EOF = 0; registerToken(EOF, "eof")
 
-  private val NAN = registerToken("NaN")
-  private val INFINITY = registerToken("Infinity")
-  private val NUMBER = registerToken("number literal")
+  private final val NAN = 1; registerToken(NAN, "NaN")
+  private final val INFINITY = 2; registerToken(INFINITY, "Infinity")
+  private final val NUMBER = 3; registerToken(NUMBER, "number literal")
 
-  private val IDENTIFIER = registerToken("identifier")
+  private final val IDENTIFIER = 4; registerToken(IDENTIFIER, "identifier")
 
-  private val STRING = registerToken("string literal")
+  private final val STRING = 5; registerToken(STRING, "string literal")
 
-  private val LEFT_BRACKET = registerToken("[")
-  private val LEFT_BRACE = registerToken("{")
+  private final val LEFT_BRACKET = 6; registerToken(LEFT_BRACKET, "[")
+  private final val LEFT_BRACE = 7; registerToken(LEFT_BRACE, "{")
 
-  private val RIGHT_BRACKET = registerToken("]")
-  private val RIGHT_BRACE = registerToken("}")
+  private final val RIGHT_BRACKET = 8; registerToken(RIGHT_BRACKET, "]")
+  private final val RIGHT_BRACE = 9; registerToken(RIGHT_BRACE, "}")
 
-  private val COLON = registerToken(":")
-  private val COMMA = registerToken(",")
-  private val EMPTY = registerToken("empty")
-  tokenInit()
+  private final val COLON = 10; registerToken(COLON, ":")
+  private final val COMMA = 11; registerToken(COMMA, ",")
+  private final val EMPTY = 12; registerToken(EMPTY, "empty")
+
 
   private type ParserState = Int
-  private var maxParserState: Int = 0
-  private var parserStateInit: () => Unit = () => Unit
-  private lazy val parserStateName = new Array[String](maxParserState)
-  private lazy val parserStateDebugString = new Array[String](maxParserState)
-  private def registerParserState(name: String, debugString: String): Token = {
-    val parserState = maxParserState
-    val currParserStateInit = parserStateInit
-    parserStateInit = () => {
-      currParserStateInit()
-      assert(parserStateDebugString(parserState) == null)
-      parserStateDebugString(parserState) = debugString
-      parserStateName(parserState) = name
-    }
-    maxParserState += 1
-    parserState
+
+  private var maxParserState: Int = 7
+  private val parserStateName = new Array[String](maxParserState)
+  private val parserStateDebugString = new Array[String](maxParserState)
+  private def registerParserState(state: ParserState, name: String, debugString: String): Unit = {
+    assert(parserStateDebugString(state) == null)
+    parserStateDebugString(state) = debugString
+    parserStateName(state) = name
   }
 
-  private val TOP_VALUE = registerParserState("TOP_VALUE", "expected value")
+  private final val TOP_VALUE = 0; registerParserState(TOP_VALUE, "TOP_VALUE", "expected value")
 
-  private val ARRAY_ELEMENT = registerParserState("ARRAY_ELEMENT", s"expected value or ${tokenName(RIGHT_BRACKET)}")
-  private val ARRAY_COMMA = registerParserState("ARRAY_COMMA", s"expected ${tokenName(COMMA)}")
+  private final val ARRAY_ELEMENT = 1; registerParserState(ARRAY_ELEMENT, "ARRAY_ELEMENT", s"expected value or ${tokenName(RIGHT_BRACKET)}")
+  private final val ARRAY_COMMA = 2; registerParserState(ARRAY_COMMA, "ARRAY_COMMA", s"expected ${tokenName(COMMA)}")
 
-  private val OBJECT_KEY = registerParserState("OBJECT_KEY", s"expected ${tokenName(IDENTIFIER)} or ${tokenName(RIGHT_BRACE)}")
-  private val OBJECT_COLON = registerParserState("OBJECT_COLON", s"expected ${tokenName(COLON)}")
-  private val OBJECT_VALUE = registerParserState("OBJECT_VALUE", s"expected value}")
-  private val OBJECT_COMMA = registerParserState("OBJECT_COMMA", s"expected ${tokenName(COMMA)} or ${tokenName(IDENTIFIER)}")
-  parserStateInit()
+  private final val OBJECT_KEY = 3; registerParserState(OBJECT_KEY, "OBJECT_KEY", s"expected ${tokenName(IDENTIFIER)} or ${tokenName(RIGHT_BRACE)}")
+  private final val OBJECT_COLON = 4; registerParserState(OBJECT_COLON, "OBJECT_COLON", s"expected ${tokenName(COLON)}")
+  private final val OBJECT_VALUE = 5; registerParserState(OBJECT_VALUE, "OBJECT_VALUE", s"expected value")
+  private final val OBJECT_COMMA = 6; registerParserState(OBJECT_COMMA, "OBJECT_COMMA", s"expected ${tokenName(COMMA)} or ${tokenName(IDENTIFIER)}")
 
-  private val reservedIdentifiers: Set[String] = Set(
+  // print warning if useing reserved identifier as key?
+  private final val reservedIdentifiers: Set[String] = Set(
     // keywords
     "break", "do", "instanceof", "typeof",
     "case", "else", "new", "var",
@@ -93,28 +76,63 @@ package object json5 {
     "const", "export", "import",
   )
 
-  private val literalIdentifiers: Set[String] = Set(
+  private final val literalIdentifiers: Set[String] = Set(
     "false", "true", "NaN", "Infinity", "null",
   )
 
-  class Parser(source: Array[Char]) {
+  private class Parser(source: Array[Char]) {
     private val lexer = new Lexer(source)
 
     def parse[Context, T](visitor: Visitor[Context, T]): T = {
       val value = rparse(TOP_VALUE, visitor, List.empty)
-      println(value)
       lexer.lex()
-      if (lexer.token != EOF) {
-        error(s"unexpected ${tokenName(lexer.token)}, expected ${tokenName(EOF)}")
+      if (lexer.getToken != EOF) {
+        error(s"unexpected ${tokenName(lexer.getToken)}, expected ${tokenName(EOF)}")
       }
       value
     }
 
     protected def error(msg: String): Nothing =
-      throw new Exception(s"at line ${lexer.line}, column ${lexer.column}: $msg")
+      throw new Exception(s"at line ${lexer.getLine}, column ${lexer.getColumn}: $msg")
 
     protected def error(token: Token, state: ParserState): Nothing =
       error(s"unexpected token ${tokenName(token)}, ${parserStateDebugString(state)}, state: ${parserStateName(state)}")
+
+    // just to make things look pretty
+    import scala.language.implicitConversions
+    @inline implicit def castToObjVisitor[Context, T](v: BaseVisitor[Context, T]) = v.asInstanceOf[ObjectVisitor[Context, T]]
+    @inline implicit def castToArrVisitor[Context, T](v: BaseVisitor[Context, T]) = v.asInstanceOf[ArrayVisitor[Context, T]]
+    @inline implicit def castToValVisitor[Context, T](v: BaseVisitor[Context, T]) = v.asInstanceOf[Visitor[Context, T]]
+
+    private def visitLiteral[Context, T](
+      context: Context,
+      valVisitor: Visitor[Context, T],
+      token: Token) = {
+      (token: @switch) match {
+        case NAN => valVisitor.visitNaN(context, lexer.getStrVal.head == '-')
+        case INFINITY => valVisitor.visitInfinity(context, lexer.getStrVal.head == '-')
+        case NUMBER =>
+          if (lexer.getNumberDotIndex >= 0) {
+            valVisitor.visitFloat(context, lexer.getNumberDotIndex, lexer.getStrVal)
+          } else {
+            valVisitor.visitInteger(context, lexer.getNumberBase, lexer.getStrVal)
+          }
+        case STRING => valVisitor.visitString(context, lexer.getStrVal)
+      }
+    }
+
+    private def visitIdentifierLiteral[Context, T](
+      context: Context,
+      valVisitor: Visitor[Context, T],
+      identifier: String) = {
+      identifier match {
+        case "false" => valVisitor.visitFalse(context)
+        case "true" => valVisitor.visitTrue(context)
+        case "NaN" => valVisitor.visitNaN(context, false)
+        case "Infinity" => valVisitor.visitInfinity(context, false)
+        case "null" => valVisitor.visitNull(context)
+      }
+    }
 
     @tailrec
     private def rparse[Context, T](
@@ -125,62 +143,27 @@ package object json5 {
       type ObjVisitor = ObjectVisitor[Context, T]
       type ValVisitor = Visitor[Context, T]
 
-      // just to make things look pretty
-      import scala.language.implicitConversions
-      @inline implicit def castToObjVisitor(v: BaseVisitor[Context, T]) = v.asInstanceOf[ObjVisitor]
-      @inline implicit def castToArrVisitor(v: BaseVisitor[Context, T]) = v.asInstanceOf[ArrVisitor]
-      @inline implicit def castToValVisitor(v: BaseVisitor[Context, T]) = v.asInstanceOf[ValVisitor]
-
-      println(s"${parserStateName(state)} ${stack.length}")
       lexer.lex()
-      //println(tokenName(lexer.token))
-      val token = lexer.token
-      val context: Context = visitor.getContext(lexer)
+      val token = lexer.getToken
+      lazy val context: Context = visitor.getContext(lexer)
       (token: @switch) match {
-        case EOF =>
-          println(stack)
-          error(EOF, state)
+        case EOF => error(EOF, state)
         case IDENTIFIER =>
           (state: @switch) match {
             case OBJECT_KEY =>
-              (visitor: ObjVisitor).visitKey(context, lexer.strVal)
+              (visitor: ObjVisitor).visitKey(context, lexer.getStrVal)
               rparse(OBJECT_COLON, visitor, stack)
-            case TOP_VALUE | ARRAY_ELEMENT | OBJECT_VALUE =>
-              if (literalIdentifiers(lexer.strVal)) {
-                val valVisitor = visitor match {
-                  case v: ValVisitor => v
-                  case v: ObjVisitor => v.valueVisitor()
-                  case v: ArrVisitor => v.elementVisitor()
-                }
-                val value = lexer.strVal match {
-                  case "false" => valVisitor.visitFalse(context)
-                  case "true" => valVisitor.visitTrue(context)
-                  case "NaN" => valVisitor.visitNaN(context, false)
-                  case "Infinity" => valVisitor.visitInfinity(context, false)
-                  case "null" => valVisitor.visitNull(context)
-                }
-                (state: @switch) match {
-                  case TOP_VALUE =>
-                    if (stack.nonEmpty) { error("impossible") }
-                    value
-                  case ARRAY_ELEMENT =>
-                    //if (stack.isEmpty) { error("impossible") }
-                    //(stack.head: ArrVisitor).visitElement(value)
-                    //rparse(ARRAY_COMMA, stack.head, stack.tail)
-                    (visitor: ArrVisitor).visitElement(value)
-                    rparse(ARRAY_COMMA, visitor, stack)
-                  case OBJECT_VALUE =>
-                    //if (stack.isEmpty) { error("impossible") }
-                    //(stack.head: ObjVisitor).visitValue(value)
-                    //rparse(OBJECT_COMMA, stack.head, stack.tail)
-                    (visitor: ObjVisitor).visitValue(value)
-                    rparse(OBJECT_COMMA, visitor, stack)
-                  case _ =>
-                    error(token, state)
-                }
-              } else {
-                error(token, state)
-              }
+            case TOP_VALUE =>
+              if (stack.nonEmpty) { error("impossible") }
+              visitIdentifierLiteral(context, visitor: ValVisitor, lexer.getStrVal)
+            case ARRAY_ELEMENT =>
+              val value = visitIdentifierLiteral(context, (visitor: ArrVisitor).elementVisitor(), lexer.getStrVal)
+              (visitor: ArrVisitor).visitElement(value)
+              rparse(ARRAY_COMMA, visitor, stack)
+            case OBJECT_VALUE =>
+              val value = visitIdentifierLiteral(context, (visitor: ObjVisitor).valueVisitor(), lexer.getStrVal)
+              (visitor: ObjVisitor).visitValue(value)
+              rparse(OBJECT_COMMA, visitor, stack)
             case _ =>
               error(token, state)
           }
@@ -266,87 +249,76 @@ package object json5 {
             error(token, state)
           }
         case _ =>
-          if (state == OBJECT_KEY) {
-            (token: @switch) match {
-              case STRING =>
-                (visitor: ObjVisitor).visitKey(context, lexer.strVal)
-                rparse(OBJECT_COLON, visitor, stack)
-              case _ =>
-                error(token, state)
-            }
-          } else {
-            val valVisitor = visitor match {
-              case v: ValVisitor => v
-              case v: ObjVisitor => v.valueVisitor()
-              case v: ArrVisitor => v.elementVisitor()
-            }
-            val value = (token: @switch) match {
-              case NAN => valVisitor.visitNaN(context, lexer.strVal.head == '-')
-              case INFINITY => valVisitor.visitInfinity(context, lexer.strVal.head == '-')
-              case NUMBER =>
-                if (lexer.numberDotIndex() >= 0) {
-                  valVisitor.visitInteger(context, lexer.numberBase, lexer.strVal)
-                } else {
-                  valVisitor.visitFloat(context, lexer.numberDotIndex(), lexer.strVal)
-                }
-              case STRING => valVisitor.visitString(context, lexer.strVal)
-            }
-
-            (state: @switch) match {
-              case TOP_VALUE =>
-                if (stack.nonEmpty) { error("impossible") }
-                value
-              case OBJECT_VALUE =>
-                (visitor: ObjVisitor).visitValue(value)
-                rparse(OBJECT_COMMA, visitor, stack)
-              case ARRAY_ELEMENT =>
-                (visitor: ArrVisitor).visitElement(value)
-                rparse(ARRAY_COMMA, visitor, stack)
-              case _ =>
-                error(token, state)
-            }
+          (state: @switch) match {
+            case OBJECT_KEY =>
+              (token: @switch) match {
+                case STRING =>
+                  (visitor: ObjVisitor).visitKey(context, lexer.getStrVal)
+                  rparse(OBJECT_COLON, visitor, stack)
+                case _ =>
+                  error(token, state)
+              }
+            case TOP_VALUE =>
+              if (stack.nonEmpty) { error("impossible") }
+              visitLiteral(context, visitor: ValVisitor, token)
+            case OBJECT_VALUE =>
+              val value = visitLiteral(context, (visitor: ObjVisitor).valueVisitor(), token)
+              (visitor: ObjVisitor).visitValue(value)
+              rparse(OBJECT_COMMA, visitor, stack)
+            case ARRAY_ELEMENT =>
+              val value = visitLiteral(context, (visitor: ObjVisitor).elementVisitor(), token)
+              (visitor: ArrVisitor).visitElement(value)
+              rparse(ARRAY_COMMA, visitor, stack)
+            case _ =>
+              error(token, state)
           }
       }
     }
   }
 
-  private val SU = '\u001A' // substitution character
+  private final val SU = '\u001A' // substitution character
 
   private type Offset = Int
   class Lexer(source: Array[Char]) {
     private val buffer = new StringBuilder
 
     // position of current character
-    var position: Offset = -1
+    private var position: Offset = -1
+    def getPosition: Offset = position
 
     // start offset of the current token
-    var startOffset: Offset = -1
+    private var startOffset: Offset = -1
+    def getStartOffset: Offset = startOffset
 
     // current character
     private var ch: Char = SU
     nextChar()
     
-
     // the line number of the current position
-    var line: Offset = 1
+    private var line: Offset = 1
+    def getLine: Offset = line
 
     // the column of the current position
-    var column: Offset = 0
+    private var column: Offset = 0
+    def getColumn: Offset = column
 
     // the type of the current token
-    var token: Token = EMPTY
+    private var token: Token = EMPTY
+    def getToken: Offset = token
 
     // the raw string value of the current token
-    var strVal: String = null
+    private var strVal: String = null
+    def getStrVal: String = strVal
 
     // the base of the current token if the current token is a number
-    var numberBase: Int = 0
+    private var numberBase: Int = 0
+    def getNumberBase: Offset = numberBase
 
-    var numberDotPosition: Int = -1
-    def numberDotIndex(): Int = numberDotPosition - startOffset
+    private var numberDotPosition: Int = -1
+    def getNumberDotIndex: Int = numberDotPosition - startOffset
 
-    var numberExponentPosition: Int = -1
-    def numberExponentIndex(): Int = numberExponentPosition - startOffset
+    private var numberExponentPosition: Int = -1
+    def getNumberExponentIndex: Int = numberExponentPosition - startOffset
 
     private def setStrVal(): Unit = {
       strVal = buffer.toString
@@ -374,7 +346,6 @@ package object json5 {
 
     @inline
     private def putChar(c: Char): Unit = {
-      //println(s"put: $c")
       buffer.append(c)
     }
 
@@ -412,7 +383,7 @@ package object json5 {
       }
     }
 
-    protected def error(msg: String): Nothing = throw new Exception(msg)
+    protected def error(msg: String): Nothing = throw new Exception(s"at line $line, column $column:" + msg)
 
     private def unicodeEscape(): Char = {
       val codePoint: Int = 0
@@ -457,29 +428,31 @@ package object json5 {
       // numeric literal
       (ch: @switch) match {
         case '0' =>
-          putChar(ch)
           nextChar()
           (ch: @switch) match {
             case 'x' | 'X' =>
               numberBase = 16
-              putChar(ch)
               nextChar()
               while (isHexDigit(ch)) {
                 putChar(ch)
                 nextChar()
               }
+              token = NUMBER
+              setStrVal()
             case '.' =>
+              putChar('0')
               putChar(ch)
               nextChar()
               numberDotPosition = position
-              lexFraction()
               if (isDigit(ch)) {
                 putChar(ch)
                 nextChar()
               } else {
                 error("expected digit")
               }
+              lexFraction()
             case _ =>
+              putChar('0')
               setStrVal()
               token = NUMBER
           }
@@ -622,9 +595,13 @@ package object json5 {
             }
           case '\n' | '\r' => // paragraph separater
             error("invalid string character, line continuations must be escaped")
-          case SU if isAtEnd =>
-            error("unclosed string")
-
+          case SU =>
+            if (isAtEnd) {
+              error("unclosed string")
+            } else {
+              putChar(ch)
+              nextChar()
+            }
           // everything else is valid string
           case other =>
             putChar(ch)
@@ -674,11 +651,10 @@ package object json5 {
     private def skipMultiLineComment(): Unit = {
       (ch: @switch) match {
         case '*' =>
-          while (ch == '*') {
+          nextChar()
+          if (ch == '/') {
             nextChar()
-          }
-          if (ch != '/') {
-            nextChar()
+          } else {
             skipMultiLineComment()
           }
         case SU if isAtEnd =>
@@ -710,7 +686,7 @@ package object json5 {
         case '\\' =>
           nextChar()
           if (ch != 'u') {
-            error("only unicode escape sequences are allowed in identifiers")
+            error("invalid escape sequence '\\$ch', only unicode escape sequences are allowed in identifiers")
           }
           nextChar()
           val uCh = unicodeEscape()
@@ -721,9 +697,6 @@ package object json5 {
           } else {
             error(s"not a valid start of identifier: $ch")
           }
-
-        case SU => // strangely enough, Character.isUnicodeIdentifierPart(SU) returns true!
-            error(s"not a valid start of identifier: $ch")
         case _ =>
           if (Character.isUnicodeIdentifierStart(ch)) {
             putChar(ch)
@@ -759,33 +732,28 @@ package object json5 {
         case '\\' =>
           nextChar()
           if (ch != 'u') {
-            error("only unicode escape sequences are allowed in identifiers")
+            error("invalid escape sequence '\\$ch', only unicode escape sequences are allowed in identifiers")
           }
           nextChar()
           val uCh = unicodeEscape()
-          if (Character.isUnicodeIdentifierPart(uCh)) {
+          if (Character.isUnicodeIdentifierPart(uCh) || uCh == '$') {
             putChar(uCh)
             nextChar()
             lexIdentfierRest()
           } else {
-            //error(s"not a valid part of identifier: $ch")
             setStrVal()
             token = IDENTIFIER
           }
 
-        case SU =>
-          if (!isAtEnd) {
-            //error(s"not a valid part of identifier: $ch")
-            setStrVal()
-            token = IDENTIFIER
-          }
+        case SU => // isUnicodeIdentifierPart returns true for SU?
+          setStrVal()
+          token = IDENTIFIER
         case _ =>
           if (Character.isUnicodeIdentifierPart(ch)) {
             putChar(ch)
             nextChar()
             lexIdentfierRest()
           } else {
-            //error(s"not a valid part of identifier: $ch")
             setStrVal()
             token = IDENTIFIER
           }
@@ -794,7 +762,6 @@ package object json5 {
 
     @tailrec
     final def lex(): Unit = {
-      //println(s"LEX $ch")
       startOffset = position
       (ch: @switch) match {
         case '\t'
@@ -826,15 +793,33 @@ package object json5 {
              'z' |
              '$' | '_' | '\\' =>
           lexIdentfier()
-        case '{' | '}' | '[' | ']' | ':' | ',' =>
-          (ch: @switch) match {
-            case '{' => token = LEFT_BRACE
-            case '}' => token = RIGHT_BRACE
-            case '[' => token = LEFT_BRACKET
-            case ']' => token = RIGHT_BRACKET
-            case ':' => token = COLON
-            case ',' => token = COMMA
-          }
+        case '{' =>
+          token = LEFT_BRACE
+          putChar(ch)
+          nextChar()
+          setStrVal()
+        case '}' =>
+        token = RIGHT_BRACE
+          putChar(ch)
+          nextChar()
+          setStrVal()
+        case '[' =>
+          token = LEFT_BRACKET
+          putChar(ch)
+          nextChar()
+          setStrVal()
+        case ']' =>
+          token = RIGHT_BRACKET
+          putChar(ch)
+          nextChar()
+          setStrVal()
+        case ':' =>
+          token = COLON
+          putChar(ch)
+          nextChar()
+          setStrVal()
+        case ',' =>
+          token = COMMA
           putChar(ch)
           nextChar()
           setStrVal()
