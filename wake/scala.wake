@@ -1,0 +1,12 @@
+def workspaceroot = "{here}/../"
+def scalaPackage = "sifive.duhlib.duh"
+
+global def duhScalaModule =
+  def name = "duhScala"
+  def rootDir = "{workspaceroot}"
+  def scalaVersion = federationScalaModule.getScalaModuleScalaVersion
+  def deps = federationScalaModule, Nil
+  makeScalaModule name rootDir scalaVersion
+  | setScalaModuleSourceDirs ("src", Nil)
+  | setScalaModuleDeps deps
+  | setScalaModuleScalacOptions ("-Xsource:2.11", Nil)
